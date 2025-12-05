@@ -69,25 +69,29 @@ export function exportArtworkSTLs() {
                 }
             }
 
-            // Step 4: Vectorize each layer (combine adjacent pixels)
+            // Step 4: Vectorize and combine all layers per filament (like grid export)
             const stls = {};
-            let fileCount = 0;
 
-            for (let li = 0; li < maxLayers; li++) {
-                for (let fi = 0; fi < sel.length; fi++) {
+            // One STL per filament (combines all layers)
+            for (let fi = 0; fi < sel.length; fi++) {
+                let filamentFacets = '';
+                let totalRectangles = 0;
+
+                // Combine all layers for this filament
+                for (let li = 0; li < maxLayers; li++) {
                     const pixels = layerMaps[li][fi];
                     if (pixels.size === 0) continue;
 
-                    console.log(`Layer ${li}, Filament ${fi}: ${pixels.size} pixels`);
+                    console.log(`Filament ${fi}, Layer ${li}: ${pixels.size} pixels`);
 
                     // Convert pixel set to 2D grid for vectorization
                     const pixelGrid = new Set(pixels);
                     const rectangles = vectorizePixels(pixelGrid, imgW, imgH);
 
                     console.log(`  → Vectorized to ${rectangles.length} rectangles`);
+                    totalRectangles += rectangles.length;
 
-                    // Generate STL geometry
-                    let facets = '';
+                    // Generate STL geometry for this layer
                     const z0 = li * layerH;
                     const z1 = z0 + layerH;
 
@@ -97,13 +101,16 @@ export function exportArtworkSTLs() {
                         const x1 = (rect.x + rect.w) * pixelSize;
                         const y1 = (rect.y + rect.h) * pixelSize;
 
-                        facets += generateBox(x0, y0, z0, x1, y1, z1);
+                        filamentFacets += generateBox(x0, y0, z0, x1, y1, z1);
                     }
+                }
 
+                // Only create STL if this filament has geometry
+                if (filamentFacets.length > 0) {
                     const filName = COLOURS[sel[fi]].n.replace(/[^a-zA-Z0-9]/g, '_');
-                    const fileName = `artwork_layer${li}_${filName}.stl`;
-                    stls[fileName] = wrapSTL(facets, `Artwork_L${li}_F${fi}`);
-                    fileCount++;
+                    const fileName = `artwork_${filName}.stl`;
+                    stls[fileName] = wrapSTL(filamentFacets, `Artwork_${filName}`);
+                    console.log(`Filament ${fi} (${filName}): ${totalRectangles} total rectangles across all layers`);
                 }
             }
 
@@ -113,7 +120,7 @@ export function exportArtworkSTLs() {
                 saveAs(blob, fileName);
             });
 
-            msg(4, `✓ Exported ${fileCount} artwork STL files`, 'ok');
+            msg(4, `✓ Exported ${Object.keys(stls).length} artwork STL files (one per filament)`, 'ok');
 
         } catch (e) {
             msg(4, `Error: ${e.message}`, 'err');
