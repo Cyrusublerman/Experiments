@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4-Colour FDM Workflow - Fixed Final</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--space:16px;--border:#ccc;--primary:#007bff;--bg:#fff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Space Mono",monospace;background:#f9f9f9;padding:var(--space);line-height:1.6;color:#333;font-size:13px}
+.container{max-width:1800px;margin:0 auto}
+h1{text-align:center;margin-bottom:var(--space);padding-bottom:var(--space);border-bottom:2px solid var(--border)}
+.section{background:var(--bg);border:1px solid var(--border);padding:var(--space);margin-bottom:var(--space);box-shadow:2px 2px 5px rgba(0,0,0,0.1);border-radius:4px}
+.section h2{margin:0 0 var(--space) 0;font-size:1.1em;font-weight:700;border-bottom:2px solid var(--primary);padding-bottom:8px}
+.box{background:#f9f9f9;border:1px solid var(--border);padding:12px;margin-bottom:var(--space);border-radius:4px}
+.box h3{margin:0 0 12px 0;font-size:0.95em;font-weight:700}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:var(--space)}
+@media(max-width:1000px){.grid-2{grid-template-columns:1fr}}
+label{display:block;margin-bottom:4px;font-weight:700;font-size:0.85em}
+input[type="file"],input[type="number"],select{padding:6px;margin-bottom:8px;border:1px solid var(--border);border-radius:3px;font-family:inherit;font-size:0.85em}
+input[type="number"]{width:80px}
+input[type="checkbox"]{margin-right:5px}
+button{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:8px 16px;font-family:inherit;font-size:0.85em;cursor:pointer}
+button:hover{background:#f0f0f0}
+button.primary{background:var(--primary);color:#fff;font-weight:700;border-color:var(--primary)}
+button.primary:hover{background:#0056b3}
+button:disabled{opacity:0.5;cursor:not-allowed}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.colour-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px;max-height:300px;overflow-y:auto;border:1px solid var(--border);padding:8px}
+.colour-item{display:flex;align-items:center;gap:6px;padding:4px;border-radius:3px;cursor:pointer;border:2px solid transparent}
+.colour-item:hover{background:#e9ecef}
+.colour-item.selected{background:#e7f3ff;border-color:var(--primary)}
+.colour-box{width:30px;height:30px;border:1px solid var(--border);border-radius:3px;flex-shrink:0}
+.colour-name{font-size:0.7em}
+.canvas-wrap{position:relative;background:#f5f5f5;border:1px solid var(--border);border-radius:4px;overflow:hidden;width:100%;height:500px}
+.canvas-wrap canvas{display:block;position:absolute;top:0;left:0;image-rendering:pixelated}
+.viewer-ctrl{position:absolute;top:10px;right:10px;background:rgba(255,255,255,0.95);padding:8px;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.2);z-index:10;display:flex;flex-direction:column;gap:4px}
+.viewer-ctrl button{padding:4px 8px;font-size:0.75em;margin:0}
+.align-box{background:#fff9e6;border:2px solid #ffeb3b;padding:12px;border-radius:4px;margin-top:12px}
+.align-box h4{margin:0 0 8px 0;font-size:0.9em}
+.align-inputs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px}
+.align-inputs label{font-size:0.75em;margin-bottom:2px}
+.align-inputs input{width:100%;padding:4px;font-size:0.75em}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:12px;margin-top:12px}
+.stat{text-align:center;padding:8px;background:#f0f0f0;border-radius:4px}
+.stat-val{font-size:1.2em;font-weight:700;color:var(--primary)}
+.stat-lbl{font-size:0.75em;color:#666;margin-top:2px}
+.palette{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.swatch{width:40px;height:40px;border:2px solid var(--border);border-radius:4px;cursor:pointer;position:relative}
+.swatch:hover{transform:scale(1.15);box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10}
+.popup{position:fixed;bottom:20px;right:20px;background:var(--bg);border:2px solid var(--primary);border-radius:8px;padding:15px;box-shadow:0 4px 20px rgba(0,0,0,0.3);min-width:300px;z-index:1000;display:none}
+.popup.show{display:block}
+.popup h4{margin:0 0 10px 0;color:var(--primary);font-size:0.9em}
+.seq-info{background:#f9f9f9;padding:8px;border-radius:4px;margin-bottom:8px;font-size:0.8em}
+.layers{display:flex;flex-direction:column;gap:4px}
+.layer{display:flex;align-items:center;gap:8px;padding:4px;background:#f0f0f0;border-radius:3px;font-size:0.8em}
+.layer-box{width:25px;height:18px;border:1px solid var(--border);border-radius:3px}
+.close{position:absolute;top:5px;right:5px;background:none;border:none;font-size:1.2em;cursor:pointer;padding:0;width:24px;height:24px}
+.msg{padding:10px;margin-top:12px;border-radius:4px;font-size:0.85em}
+.msg.ok{background:#d4edda;border:1px solid #c3e6cb;color:#155724}
+.msg.err{background:#f8d7da;border:1px solid #f5c6cb;color:#721c24}
+.msg.info{background:#e7f3ff;border:1px solid #b3d9ff;color:#004085}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>4-Colour FDM Print Workflow</h1>
+
+<!-- STEP 1 -->
+<div class="section">
+<h2>Step 1: Generate Calibration Grid</h2>
+
+<div class="box">
+<h3>Select Filament Colours (2-10) - Selected: <span id="selCount">0</span></h3>
+<div id="colourGrid" class="colour-grid"></div>
+</div>
+
+<div class="grid-2">
+<div class="box">
+<h3>Dimensions</h3>
+<label>Bed: <input type="number" id="bedW" value="256" min="100">×<input type="number" id="bedH" value="256" min="100">mm</label>
+<label>Scan (A4): <input type="number" id="scanW" value="210" min="100">×<input type="number" id="scanH" value="297" min="100">mm</label>
+<label>Tile Size: <input type="number" id="tileSize" value="10" min="2" max="20" step="0.5">mm</label>
+<label>Gap: <input type="number" id="gap" value="1" min="0" max="5" step="0.5">mm</label>
+</div>
+
+<div class="box">
+<h3>Grid Config</h3>
+<label>Layers/Cell: <input type="number" id="layers" value="4" min="1" max="10"></label>
+<label>Layer Height: <input type="number" id="layerH" value="0.08" min="0.04" max="0.4" step="0.01">mm</label>
+<label>Base Layers: <input type="number" id="baseLayers" value="3" min="0" max="10"></label>
+<label>Base Colour:
+<select id="baseColour">
+<option value="-1">White (default)</option>
+</select>
+</label>
+<label><input type="checkbox" id="fillRect" checked> Fill Rectangle Base</label>
+</div>
+</div>
+
+<div class="btn-row">
+<button class="primary" onclick="generateGrid()">Generate Grid</button>
+<button onclick="exportGridJSON()">Export Grid JSON</button>
+<button onclick="document.getElementById('importJSON').click()">Import Grid JSON</button>
+<input type="file" id="importJSON" accept=".json" style="display:none" onchange="importGridJSON()">
+<button onclick="exportSTLs()">Export STLs</button>
+<button onclick="exportReferenceImage()">Export Reference Image</button>
+</div>
+
+<div id="gridBox" class="box hidden">
+<h3>Generated Grid Preview</h3>
+<div class="canvas-wrap">
+<canvas id="gridCanvas"></canvas>
+<div class="viewer-ctrl">
+<button onclick="zoomGrid(1.2)">Zoom +</button>
+<button onclick="zoomGrid(0.8)">Zoom −</button>
+<button onclick="resetGridView()">Reset</button>
+</div>
+</div>
+<div class="stats">
+<div class="stat"><div class="stat-val" id="totSeqs">0</div><div class="stat-lbl">Sequences</div></div>
+<div class="stat"><div class="stat-val" id="gridRows">0</div><div class="stat-lbl">Rows</div></div>
+<div class="stat"><div class="stat-val" id="gridCols">0</div><div class="stat-lbl">Columns</div></div>
+<div class="stat"><div class="stat-val" id="gridDims">0×0mm</div><div class="stat-lbl">Size</div></div>
+</div>
+</div>
+
+<div id="msg1" class="msg hidden"></div>
+</div>
+
+<!-- STEP 2 -->
+<div class="section">
+<h2>Step 2: Scan Analysis & Alignment</h2>
+
+<div class="box">
+<h3>Upload Scan</h3>
+<input type="file" id="scanFile" accept="image/*">
+<label>Dead Space: <input type="number" id="deadSpace" value="60" min="20" max="90">%</label>
+</div>
+
+<div class="btn-row">
+<button class="primary" id="analyseBtn" onclick="analyseScan()" disabled>Analyse Scan</button>
+<button id="overlayBtn" onclick="toggleOverlay()" disabled>Toggle Grid Overlay</button>
+<button onclick="exportAlignment()">Export Alignment</button>
+<button onclick="removeDuplicates()">Remove Duplicates</button>
+</div>
+
+<div id="scanBox" class="box hidden">
+<h3>Scan with Interactive Alignment</h3>
+<div class="canvas-wrap">
+<canvas id="scanCanvas"></canvas>
+<div class="viewer-ctrl">
+<button onclick="zoomScan(1.2)">Zoom +</button>
+<button onclick="zoomScan(0.8)">Zoom −</button>
+<button onclick="panScan(-50,0)">◀</button>
+<button onclick="panScan(50,0)">▶</button>
+<button onclick="panScan(0,-50)">▲</button>
+<button onclick="panScan(0,50)">▼</button>
+<button onclick="resetScanView()">Reset</button>
+</div>
+</div>
+
+<div class="align-box">
+<h4>🎯 Grid Alignment Controls (drag grid or use inputs)</h4>
+<div class="align-inputs">
+<div><label>X Offset</label><input type="number" id="offsetX" value="0" step="1" oninput="updateAlign()"></div>
+<div><label>Y Offset</label><input type="number" id="offsetY" value="0" step="1" oninput="updateAlign()"></div>
+<div><label>Scale X</label><input type="number" id="scaleX" value="1" step="0.01" min="0.1" max="5" oninput="updateAlign()"></div>
+<div><label>Scale Y</label><input type="number" id="scaleY" value="1" step="0.01" min="0.1" max="5" oninput="updateAlign()"></div>
+</div>
+<div style="display:flex;gap:8px;margin-top:8px">
+<button onclick="autoScale()">Auto-Scale from A4</button>
+<button onclick="resetAlign()">Reset Alignment</button>
+</div>
+<p style="font-size:0.75em;margin-top:8px;color:#666">💡 Click "Auto-Scale" to calculate from A4 dimensions automatically</p>
+</div>
+
+<div class="stats">
+<div class="stat"><div class="stat-val" id="scannedCount">0</div><div class="stat-lbl">Scanned</div></div>
+<div class="stat"><div class="stat-val" id="uniqueCount">0</div><div class="stat-lbl">Unique</div></div>
+<div class="stat"><div class="stat-val" id="dupsCount">0</div><div class="stat-lbl">Duplicates</div></div>
+</div>
+
+<h4>Extracted Palette (click to see sequence)</h4>
+<div id="palette" class="palette"></div>
+
+<div class="btn-row">
+<button onclick="exportPalette()">Export Palette (GPL)</button>
+<button onclick="exportComparison()">Export Comparison (CSV)</button>
+</div>
+</div>
+
+<div id="msg2" class="msg hidden"></div>
+</div>
+
+<!-- STEP 3 -->
+<div class="section">
+<h2>Step 3: Image Quantisation</h2>
+
+<div class="box">
+<h3>Load Image</h3>
+<input type="file" id="imgFile" accept="image/*">
+</div>
+
+<div class="grid-2">
+<div class="box">
+<h3>Options</h3>
+<label>Print Width: <input type="number" id="printW" value="170" min="10" max="500">mm</label>
+<label>Max Colours: <input type="number" id="maxColours" value="4" min="2" max="10"></label>
+<label>Min Detail: <input type="number" id="minDetail" value="1.0" min="0.1" max="10" step="0.1">mm <small id="minDetailPx">≈10px</small></label>
+<label><input type="checkbox" id="dither" checked> Floyd-Steinberg Dither</label>
+<label><input type="checkbox" id="applyMinDetail" checked> Apply Min Detail Filter</label>
+</div>
+
+<div class="box">
+<h3>Palette</h3>
+<div id="quantPalette" class="palette"></div>
+</div>
+</div>
+
+<div class="btn-row">
+<button class="primary" id="quantBtn" onclick="quantiseImage()" disabled>Quantise Image</button>
+<button onclick="resetQuant()">Reset</button>
+</div>
+
+<div id="quantBox" class="box hidden">
+<h3>Results</h3>
+<div class="grid-2">
+<div>
+<h4>Original</h4>
+<div class="canvas-wrap" style="height:400px">
+<canvas id="origCanvas"></canvas>
+</div>
+</div>
+<div>
+<h4>Quantised</h4>
+<div class="canvas-wrap" style="height:400px">
+<canvas id="quantCanvas"></canvas>
+</div>
+</div>
+</div>
+</div>
+
+<div id="msg3" class="msg hidden"></div>
+</div>
+
+<!-- STEP 4 -->
+<div class="section">
+<h2>Step 4: Export Print Files</h2>
+
+<div id="printBox" class="box hidden">
+<h3>Filament Layers</h3>
+<div id="layerPreview" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px"></div>
+<div class="stats">
+<div class="stat"><div class="stat-val" id="printW">-</div><div class="stat-lbl">Width (mm)</div></div>
+<div class="stat"><div class="stat-val" id="printH">-</div><div class="stat-lbl">Height (mm)</div></div>
+<div class="stat"><div class="stat-val" id="printL">-</div><div class="stat-lbl">Layers</div></div>
+</div>
+<div class="btn-row">
+<button class="primary" onclick="exportLayers()">Export Layer PNGs</button>
+<button onclick="exportPrintInfo()">Export Print Info</button>
+</div>
+</div>
+
+<div id="msg4" class="msg hidden"></div>
+</div>
+
+</div>
+
+<!-- POPUP -->
+<div id="popup" class="popup">
+<button class="close" onclick="closePopup()">×</button>
+<h4>Sequence Details</h4>
+<div class="seq-info">
+<div><strong>RGB:</strong> <span id="popRGB">-</span></div>
+<div><strong>Sequence:</strong> <span id="popSeq">-</span></div>
+</div>
+<div id="popLayers" class="layers"></div>
+</div>
+
+<canvas id="work" style="display:none"></canvas>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script>
+// COLOURS
+const COLOURS=[
+{h:"#FF7746",n:"Orange HF PETG"},{h:"#FFCE26",n:"Translucent Orange"},{h:"#FFFFFF",n:"White PETG"},
+{h:"#CC3F45",n:"Red PLA/PETG"},{h:"#A3A6AA",n:"HF Grey PETG"},{h:"#4FC359",n:"Alpine Green Sparkle"},
+{h:"#0AC789",n:"Basic Transparent PETG"},{h:"#56A4AD",n:"Dark Green PLA Matte"},{h:"#616364",n:"Matte Charcoal Grey PLA"},
+{h:"#3F9CCC",n:"Blue Silk PLA"},{h:"#BC9091",n:"Grey TPU/TPE"},{h:"#F0FEF3",n:"White TPU/TPE"},
+{h:"#6479B8",n:"Blue Grey PLA"},{h:"#F0D0DC",n:"Pink PETG CF"},{h:"#931010",n:"Dark Red TPU/TPE"},
+{h:"#4C484A",n:"Black PA6GF CF"},{h:"#966451",n:"Trim Grey Metallic PLA"},{h:"#FFE825",n:"Sunflower Yellow PLA"},
+{h:"#F4AFF3",n:"Merlot Plum PLA"},{h:"#6565F2",n:"Purple PLA"},{h:"#5A7BC0",n:"Metallic Cobalt Blue PLA"},
+{h:"#4F9756",n:"Neptune PLA Galaxy"},{h:"#76654F",n:"Grass Green PLA"},{h:"#FC9257",n:"Mandarin Orange PLA"},
+{h:"#EF9CA1",n:"Pink PLA"},{h:"#4C5752",n:"Purple Galaxy PLA"},{h:"#FF9399",n:"Light Grey CF PLA"},
+{h:"#4C9BF6",n:"Gold Metallic PLA"},{h:"#EEC4C1",n:"Pink Silk PLA"},{h:"#932DA1",n:"Marine Blue PLA"},
+{h:"#954D3F",n:"Marble Red PLA"},{h:"#B67254",n:"Bronze PLA"},{h:"#607745",n:"Olive Green PLA"},
+{h:"#3DCE59",n:"Alpine Green PLA"},{h:"#2E7799",n:"Medullosa Green PLA"},{h:"#B35C3F",n:"Crimson Red Sparkle PLA"},
+{h:"#BB7398",n:"Purple Grey PLA"},{h:"#A0B499",n:"Anti-Grey PLA"},{h:"#A7A344",n:"Chartreuse PLA"},
+{h:"#6D9553",n:"Green PLA"},{h:"#FECADE",n:"White Jade PLA"},{h:"#C13C40",n:"Red PLA"},
+{h:"#00B8DC",n:"Cyan PLA"},{h:"#C25498",n:"Magenta PLA"},{h:"#FED003",n:"Yellow PLA"},
+{h:"#09A4CE",n:"Sky Blue PLA"},{h:"#939393",n:"Grey PLA"},{h:"#444443",n:"Black PETG"},
+{h:"#60AF73",n:"Violet Purple PETG"},{h:"#2B8F98",n:"Teal PLA"},{h:"#BB7935",n:"Copper Silk PLA"},
+{h:"#EDCE1A",n:"Gold Silk PLA"},{h:"#F9D7E1",n:"Pale Pink PLA"},{h:"#D346A1",n:"Hot Pink PLA"},
+{h:"#787899",n:"Lilac Purple PLA"},{h:"#FCFB96",n:"Pale Yellow PLA"},{h:"#FFC968",n:"Golden Yellow PLA"},
+{h:"#B3CF3F",n:"Lime Green Metallic PLA"},{h:"#FDF192",n:"Lemon Yellow Silk PLA"},{h:"#D34651",n:"Scarlet Red Silk PLA"},
+{h:"#B09A5E",n:"Tan TPU/TPE"},{h:"#999564",n:"Olive Grey PLA"},{h:"#999939",n:"Dark Olive PLACF PLA"},
+{h:"#0DA553",n:"Forest Green PLA"},{h:"#B57B5E",n:"Bronze Silk PLA"},{h:"#09CD04",n:"Silver Metallic Silk PLA"},
+{h:"#0FD7E1",n:"Ice Blue PLA"},{h:"#9589BC",n:"Lavender Purple PLA"},{h:"#00A4CE",n:"Bright Cyan PLA"},
+{h:"#00A553",n:"Bambu Green PLA"},{h:"#404D3C",n:"Forest Black PLA"},{h:"#FF6B9D",n:"Hot Magenta PLA"},
+{h:"#8B4513",n:"Saddle Brown PLA"},{h:"#FFD700",n:"Gold PLA"}
+];
+
+// STATE
+let sel=[],grid=null,scan=null,pal=null,quant=null,sequences=new Map();
+let showOverlay=false;
+let gridView={scale:1,offsetX:0,offsetY:0};
+let scanView={scale:1,panX:0,panY:0};
+let align={offsetX:0,offsetY:0,scaleX:1,scaleY:1};
+let isDragging=false,dragStart={x:0,y:0};
+
+// INIT
+function init(){
+let g=document.getElementById('colourGrid');
+COLOURS.forEach((c,i)=>{
+let d=document.createElement('div');
+d.className='colour-item';
+d.onclick=()=>toggleColour(i);
+d.innerHTML=`<div class="colour-box" style="background:${c.h}"></div><div class="colour-name">${c.n}</div>`;
+g.appendChild(d);
+});
+updateSelCount();
+
+// Populate base colour dropdown
+updateBaseColourOptions();
+
+document.getElementById('scanFile').onchange=loadScan;
+document.getElementById('imgFile').onchange=loadImage;
+document.getElementById('printW').oninput=updateMinDetail;
+document.getElementById('minDetail').oninput=updateMinDetail;
+
+setupScanDrag();
+}
+
+function toggleColour(i){
+let idx=sel.indexOf(i);
+if(idx>-1)sel.splice(idx,1);
+else{if(sel.length>=10){msg(1,'Max 10 colours','err');return;}sel.push(i);}
+updateSelCount();
+updateBaseColourOptions();
+}
+
+function updateSelCount(){
+document.querySelectorAll('.colour-item').forEach((e,i)=>e.classList.toggle('selected',sel.includes(i)));
+document.getElementById('selCount').textContent=sel.length;
+}
+
+function updateBaseColourOptions(){
+let s=document.getElementById('baseColour');
+s.innerHTML='<option value="-1">White (default)</option>';
+sel.forEach(i=>{
+let opt=document.createElement('option');
+opt.value=i;
+opt.textContent=COLOURS[i].n;
+s.appendChild(opt);
+});
+}
+
+// STEP 1: GENERATE
+function generateGrid(){
+if(sel.length<2){msg(1,'Select 2+ colours','err');return;}
+
+let N=sel.length;
+let M=+document.getElementById('layers').value;
+let tile=+document.getElementById('tileSize').value;
+let gap=+document.getElementById('gap').value;
+let bedW=+document.getElementById('bedW').value;
+let bedH=+document.getElementById('bedH').value;
+let scanW=+document.getElementById('scanW').value;
+let scanH=+document.getElementById('scanH').value;
+
+let maxW=Math.min(bedW,scanW);
+let maxH=Math.min(bedH,scanH);
+
+let seqs=generateSequences(N,M);
+msg(1,`Generated ${seqs.length} sequences (${N}(${N}^${M}-1)/${N-1})`,'info');
+
+let tilesPerRow=Math.floor(maxW/(tile+gap));
+let tilesPerCol=Math.floor(maxH/(tile+gap));
+let maxTiles=tilesPerRow*tilesPerCol;
+
+if(seqs.length>maxTiles){
+msg(1,`${seqs.length} sequences won't fit!`,'err');
+return;
+}
+
+let rows=Math.ceil(Math.sqrt(seqs.length));
+let cols=Math.ceil(seqs.length/rows);
+
+while(cols>tilesPerRow||rows>tilesPerCol){
+if(cols>tilesPerRow){rows++;cols=Math.ceil(seqs.length/rows);}
+else{cols++;rows=Math.ceil(seqs.length/cols);}
+if(rows*cols>maxTiles){msg(1,'Cannot fit','err');return;}
+}
+
+grid={
+seqs,rows,cols,tile,gap,
+colours:sel.map(i=>COLOURS[i]),
+width:cols*(tile+gap)-gap,
+height:rows*(tile+gap)-gap
+};
+
+drawGrid();
+document.getElementById('gridBox').classList.remove('hidden');
+document.getElementById('totSeqs').textContent=seqs.length;
+document.getElementById('gridRows').textContent=rows;
+document.getElementById('gridCols').textContent=cols;
+document.getElementById('gridDims').textContent=`${grid.width.toFixed(1)}×${grid.height.toFixed(1)}mm`;
+
+sequences.clear();
+grid.seqs.forEach(seq=>{
+let c=simColour(seq,grid.colours);
+sequences.set(`${c.r},${c.g},${c.b}`,{sequence:seq,colours:grid.colours});
+});
+
+msg(1,`✓ Generated ${seqs.length} sequences in ${rows}×${cols} grid`,'ok');
+}
+
+function generateSequences(N,M){
+let seqs=[];
+function isValid(s){
+if(s.every(v=>v===0))return false;
+let z=false;
+for(let v of s){if(v===0)z=true;else if(z)return false;}
+return true;
+}
+function gen(cur,d){
+if(d===M){if(isValid(cur))seqs.push([...cur]);return;}
+if(cur.length>0&&cur[cur.length-1]===0)gen([...cur,0],d+1);
+else for(let v=0;v<=N;v++)gen([...cur,v],d+1);
+}
+gen([],0);
+return seqs;
+}
+
+function simColour(seq,colours){
+let r=0,g=0,b=0,cnt=0;
+for(let i=0;i<seq.length;i++){
+let fi=seq[i];
+if(fi>0){
+let rgb=hex2rgb(colours[fi-1].h);
+r+=rgb.r;g+=rgb.g;b+=rgb.b;cnt++;
+}
+}
+return cnt===0?{r:255,g:255,b:255}:{r:Math.round(r/cnt),g:Math.round(g/cnt),b:Math.round(b/cnt)};
+}
+
+function hex2rgb(h){
+let m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h);
+return m?{r:parseInt(m[1],16),g:parseInt(m[2],16),b:parseInt(m[3],16)}:{r:255,g:255,b:255};
+}
+
+function drawGrid(){
+let c=document.getElementById('gridCanvas');
+let ctx=c.getContext('2d');
+let wrap=c.parentElement;
+
+// FIT TO CONTAINER
+let scale=Math.min(wrap.clientWidth/grid.cols,wrap.clientHeight/grid.rows)*gridView.scale;
+c.width=grid.cols*scale;
+c.height=grid.rows*scale;
+
+// Position in center
+c.style.left=((wrap.clientWidth-c.width)/2+gridView.offsetX)+'px';
+c.style.top=((wrap.clientHeight-c.height)/2+gridView.offsetY)+'px';
+
+grid.seqs.forEach((seq,i)=>{
+if(i>=grid.rows*grid.cols)return;
+let r=Math.floor(i/grid.cols);
+let col=i%grid.cols;
+let colour=simColour(seq,grid.colours);
+ctx.fillStyle=`rgb(${colour.r},${colour.g},${colour.b})`;
+ctx.fillRect(col*scale,r*scale,scale,scale);
+});
+}
+
+function zoomGrid(f){
+gridView.scale*=f;
+drawGrid();
+}
+
+function resetGridView(){
+gridView={scale:1,offsetX:0,offsetY:0};
+drawGrid();
+}
+
+// EXPORTS
+function exportGridJSON(){
+if(!grid)return;
+let data={
+version:"1.0",
+colours:grid.colours,
+sequences:grid.seqs,
+config:{rows:grid.rows,cols:grid.cols,tile:grid.tile,gap:grid.gap,
+layers:document.getElementById('layers').value,
+layerH:document.getElementById('layerH').value,
+baseLayers:document.getElementById('baseLayers').value}
+};
+let blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+saveAs(blob,'calibration_grid.json');
+msg(1,'✓ Exported','ok');
+}
+
+function importGridJSON(){
+let f=document.getElementById('importJSON').files[0];
+if(!f)return;
+let r=new FileReader();
+r.onload=e=>{
+try{
+let data=JSON.parse(e.target.result);
+grid={
+seqs:data.sequences,
+rows:data.config.rows,
+cols:data.config.cols,
+tile:data.config.tile,
+gap:data.config.gap,
+colours:data.colours,
+width:data.config.cols*(data.config.tile+data.config.gap)-data.config.gap,
+height:data.config.rows*(data.config.tile+data.config.gap)-data.config.gap
+};
+sequences.clear();
+grid.seqs.forEach(seq=>{
+let c=simColour(seq,grid.colours);
+sequences.set(`${c.r},${c.g},${c.b}`,{sequence:seq,colours:grid.colours});
+});
+sel=[];
+grid.colours.forEach(col=>{
+let idx=COLOURS.findIndex(c=>c.h===col.h&&c.n===col.n);
+if(idx>=0)sel.push(idx);
+});
+updateSelCount();
+document.getElementById('layers').value=data.config.layers;
+document.getElementById('layerH').value=data.config.layerH;
+document.getElementById('baseLayers').value=data.config.baseLayers;
+
+drawGrid();
+document.getElementById('gridBox').classList.remove('hidden');
+document.getElementById('totSeqs').textContent=grid.seqs.length;
+document.getElementById('gridRows').textContent=grid.rows;
+document.getElementById('gridCols').textContent=grid.cols;
+document.getElementById('gridDims').textContent=`${grid.width.toFixed(1)}×${grid.height.toFixed(1)}mm`;
+
+msg(1,'✓ Imported','ok');
+}catch(e){
+msg(1,`Error: ${e.message}`,'err');
+}
+};
+r.readAsText(f);
+}
+
+function exportReferenceImage(){
+if(!grid)return;
+msg(1,'Generating...','info');
+
+setTimeout(()=>{
+let c=document.createElement('canvas');
+let cellSize=120;
+let pad=5;
+let cellTotal=cellSize+pad;
+c.width=grid.cols*cellTotal+pad;
+c.height=grid.rows*cellTotal+pad;
+let ctx=c.getContext('2d');
+
+ctx.fillStyle='#fff';
+ctx.fillRect(0,0,c.width,c.height);
+
+grid.seqs.forEach((seq,i)=>{
+if(i>=grid.rows*grid.cols)return;
+let r=Math.floor(i/grid.cols);
+let col=i%grid.cols;
+let x=pad+col*cellTotal;
+let y=pad+r*cellTotal;
+
+let colour=simColour(seq,grid.colours);
+ctx.fillStyle=`rgb(${colour.r},${colour.g},${colour.b})`;
+ctx.fillRect(x,y,cellSize,cellSize);
+
+ctx.strokeStyle='#000';
+ctx.lineWidth=2;
+ctx.strokeRect(x,y,cellSize,cellSize);
+
+ctx.fillStyle=colour.r+colour.g+colour.b>384?'#000':'#fff';
+ctx.font='bold 14px monospace';
+ctx.textAlign='center';
+ctx.textBaseline='middle';
+ctx.fillText(`[${seq.join(',')}]`,x+cellSize/2,y+cellSize/2);
+ctx.font='10px monospace';
+ctx.fillText(`#${i}`,x+cellSize/2,y+cellSize/2+20);
+});
+
+c.toBlob(blob=>{
+saveAs(blob,'reference_grid.png');
+msg(1,'✓ Exported','ok');
+});
+},100);
+}
+
+function exportSTLs(){
+if(!grid)return;
+msg(1,'Generating...','info');
+
+setTimeout(()=>{
+let stls={};
+let layerH=+document.getElementById('layerH').value;
+let base=+document.getElementById('baseLayers').value;
+let baseColIdx=+document.getElementById('baseColour').value;
+
+// Base
+if(base>0){
+let facets='';
+for(let l=0;l<base;l++){
+facets+=box(0,0,l*layerH,grid.width,grid.height,(l+1)*layerH);
+}
+let baseName=baseColIdx===-1?'base_white':'base_'+COLOURS[baseColIdx].n.replace(/[^a-zA-Z0-9]/g,'_');
+stls[baseName+'.stl']=wrapSTL(facets,'Base');
+}
+
+// Colours
+let cFacets=Array(sel.length).fill('');
+grid.seqs.forEach((seq,i)=>{
+if(i>=grid.rows*grid.cols)return;
+let r=Math.floor(i/grid.cols);
+let c=i%grid.cols;
+let x0=c*(grid.tile+grid.gap);
+let y0=r*(grid.tile+grid.gap);
+let z=base*layerH;
+for(let li=0;li<seq.length;li++){
+let fi=seq[li];
+if(fi>0){
+cFacets[fi-1]+=box(x0,y0,z,x0+grid.tile,y0+grid.tile,z+layerH);
+z+=layerH;
+}
+}
+});
+
+sel.forEach((ci,i)=>{
+let name=COLOURS[ci].n.replace(/[^a-zA-Z0-9]/g,'_');
+stls[`colour_${i}_${name}.stl`]=wrapSTL(cFacets[i],`Colour_${i}`);
+});
+
+Object.entries(stls).forEach(([fn,content])=>{
+let blob=new Blob([content],{type:'text/plain'});
+saveAs(blob,fn);
+});
+
+msg(1,`✓ Exported ${Object.keys(stls).length} STLs`,'ok');
+},100);
+}
+
+function box(x0,y0,z0,x1,y1,z1){
+return`facet normal 0 0 -1
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x1} ${y0} ${z0}
+    vertex ${x1} ${y1} ${z0}
+  endloop
+endfacet
+facet normal 0 0 -1
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x1} ${y1} ${z0}
+    vertex ${x0} ${y1} ${z0}
+  endloop
+endfacet
+facet normal 0 0 1
+  outer loop
+    vertex ${x0} ${y0} ${z1}
+    vertex ${x1} ${y1} ${z1}
+    vertex ${x1} ${y0} ${z1}
+  endloop
+endfacet
+facet normal 0 0 1
+  outer loop
+    vertex ${x0} ${y0} ${z1}
+    vertex ${x0} ${y1} ${z1}
+    vertex ${x1} ${y1} ${z1}
+  endloop
+endfacet
+facet normal 0 -1 0
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x1} ${y0} ${z0}
+    vertex ${x1} ${y0} ${z1}
+  endloop
+endfacet
+facet normal 0 -1 0
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x1} ${y0} ${z1}
+    vertex ${x0} ${y0} ${z1}
+  endloop
+endfacet
+facet normal 0 1 0
+  outer loop
+    vertex ${x0} ${y1} ${z0}
+    vertex ${x1} ${y1} ${z1}
+    vertex ${x1} ${y1} ${z0}
+  endloop
+endfacet
+facet normal 0 1 0
+  outer loop
+    vertex ${x0} ${y1} ${z0}
+    vertex ${x0} ${y1} ${z1}
+    vertex ${x1} ${y1} ${z1}
+  endloop
+endfacet
+facet normal -1 0 0
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x0} ${y1} ${z1}
+    vertex ${x0} ${y1} ${z0}
+  endloop
+endfacet
+facet normal -1 0 0
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x0} ${y0} ${z1}
+    vertex ${x0} ${y1} ${z1}
+  endloop
+endfacet
+facet normal 1 0 0
+  outer loop
+    vertex ${x1} ${y0} ${z0}
+    vertex ${x1} ${y1} ${z0}
+    vertex ${x1} ${y1} ${z1}
+  endloop
+endfacet
+facet normal 1 0 0
+  outer loop
+    vertex ${x1} ${y0} ${z0}
+    vertex ${x1} ${y1} ${z1}
+    vertex ${x1} ${y0} ${z1}
+  endloop
+endfacet
+`;
+}
+
+function wrapSTL(facets,name){
+return`solid ${name}\n${facets}endsolid ${name}\n`;
+}
+
+// STEP 2: SCAN
+function loadScan(){
+let f=document.getElementById('scanFile').files[0];
+if(!f)return;
+let r=new FileReader();
+r.onload=e=>{
+let img=new Image();
+img.onload=()=>{
+scan={img};
+document.getElementById('analyseBtn').disabled=!grid;
+document.getElementById('overlayBtn').disabled=false;
+scanView={scale:1,panX:0,panY:0};
+drawScan();
+document.getElementById('scanBox').classList.remove('hidden');
+msg(2,'✓ Loaded. Use Auto-Scale or adjust alignment.','ok');
+};
+img.src=e.target.result;
+};
+r.readAsDataURL(f);
+}
+
+function setupScanDrag(){
+let c=document.getElementById('scanCanvas');
+c.addEventListener('mousedown',e=>{
+if(!showOverlay)return;
+isDragging=true;
+dragStart={x:e.offsetX-align.offsetX,y:e.offsetY-align.offsetY};
+});
+c.addEventListener('mousemove',e=>{
+if(!isDragging)return;
+align.offsetX=e.offsetX-dragStart.x;
+align.offsetY=e.offsetY-dragStart.y;
+document.getElementById('offsetX').value=Math.round(align.offsetX);
+document.getElementById('offsetY').value=Math.round(align.offsetY);
+drawScan();
+});
+c.addEventListener('mouseup',()=>{isDragging=false;});
+c.addEventListener('mouseleave',()=>{isDragging=false;});
+}
+
+function drawScan(){
+if(!scan)return;
+let c=document.getElementById('scanCanvas');
+let ctx=c.getContext('2d');
+let wrap=c.parentElement;
+
+// FIT TO CONTAINER
+let scale=Math.min(wrap.clientWidth/scan.img.width,wrap.clientHeight/scan.img.height)*scanView.scale;
+c.width=wrap.clientWidth;
+c.height=wrap.clientHeight;
+
+let imgW=scan.img.width*scale;
+let imgH=scan.img.height*scale;
+let imgX=(c.width-imgW)/2+scanView.panX;
+let imgY=(c.height-imgH)/2+scanView.panY;
+
+ctx.fillStyle='#f5f5f5';
+ctx.fillRect(0,0,c.width,c.height);
+ctx.drawImage(scan.img,imgX,imgY,imgW,imgH);
+
+// Draw overlay
+if(showOverlay&&grid){
+ctx.save();
+ctx.translate(imgX+align.offsetX*scale,imgY+align.offsetY*scale);
+ctx.scale(align.scaleX*scale,align.scaleY*scale);
+
+ctx.strokeStyle='rgba(255,0,0,0.8)';
+ctx.lineWidth=2/scale;
+
+let cellW=scan.img.width/grid.cols;
+let cellH=scan.img.height/grid.rows;
+
+for(let r=0;r<grid.rows;r++){
+for(let c=0;c<grid.cols;c++){
+let x=c*cellW;
+let y=r*cellH;
+ctx.strokeRect(x,y,cellW,cellH);
+
+// Dead space
+let dead=+document.getElementById('deadSpace').value/100;
+let dx=cellW*(1-dead)/2;
+let dy=cellH*(1-dead)/2;
+ctx.strokeStyle='rgba(0,255,0,0.6)';
+ctx.lineWidth=1/scale;
+ctx.strokeRect(x+dx,y+dy,cellW*dead,cellH*dead);
+ctx.strokeStyle='rgba(255,0,0,0.8)';
+ctx.lineWidth=2/scale;
+}
+}
+
+ctx.restore();
+}
+}
+
+function toggleOverlay(){
+showOverlay=!showOverlay;
+drawScan();
+}
+
+function updateAlign(){
+align.offsetX=+document.getElementById('offsetX').value;
+align.offsetY=+document.getElementById('offsetY').value;
+align.scaleX=+document.getElementById('scaleX').value;
+align.scaleY=+document.getElementById('scaleY').value;
+drawScan();
+}
+
+function resetAlign(){
+align={offsetX:0,offsetY:0,scaleX:1,scaleY:1};
+document.getElementById('offsetX').value=0;
+document.getElementById('offsetY').value=0;
+document.getElementById('scaleX').value=1;
+document.getElementById('scaleY').value=1;
+drawScan();
+}
+
+function autoScale(){
+if(!scan||!grid)return;
+
+// A4 dimensions in mm
+let a4W=+document.getElementById('scanW').value;
+let a4H=+document.getElementById('scanH').value;
+
+// Pixels per mm
+let pxPerMM_X=scan.img.width/a4W;
+let pxPerMM_Y=scan.img.height/a4H;
+
+// Grid dimensions in mm
+let gridMM_W=grid.cols*(grid.tile+grid.gap)-grid.gap;
+let gridMM_H=grid.rows*(grid.tile+grid.gap)-grid.gap;
+
+// Grid dimensions in pixels
+let gridPX_W=gridMM_W*pxPerMM_X;
+let gridPX_H=gridMM_H*pxPerMM_Y;
+
+// Calculate scale
+align.scaleX=gridPX_W/scan.img.width;
+align.scaleY=gridPX_H/scan.img.height;
+
+// Center alignment
+align.offsetX=(scan.img.width-gridPX_W/align.scaleX)/2;
+align.offsetY=(scan.img.height-gridPX_H/align.scaleY)/2;
+
+document.getElementById('scaleX').value=align.scaleX.toFixed(3);
+document.getElementById('scaleY').value=align.scaleY.toFixed(3);
+document.getElementById('offsetX').value=Math.round(align.offsetX);
+document.getElementById('offsetY').value=Math.round(align.offsetY);
+
+drawScan();
+msg(2,'✓ Auto-scaled from A4 dimensions','ok');
+}
+
+function zoomScan(f){
+scanView.scale*=f;
+drawScan();
+}
+
+function panScan(dx,dy){
+scanView.panX+=dx;
+scanView.panY+=dy;
+drawScan();
+}
+
+function resetScanView(){
+scanView={scale:1,panX:0,panY:0};
+drawScan();
+}
+
+function analyseScan(){
+if(!scan||!grid)return;
+msg(2,'Analysing...','info');
+
+setTimeout(()=>{
+try{
+pal=extractColours();
+displayPalette();
+document.getElementById('scannedCount').textContent=pal.length;
+document.getElementById('uniqueCount').textContent=pal.length;
+document.getElementById('dupsCount').textContent=0;
+msg(2,'✓ Extracted colours','ok');
+}catch(e){
+msg(2,`Error: ${e.message}`,'err');
+}
+},100);
+}
+
+function extractColours(){
+let workC=document.getElementById('work');
+let ctx=workC.getContext('2d');
+workC.width=scan.img.width;
+workC.height=scan.img.height;
+ctx.drawImage(scan.img,0,0);
+
+let colours=[];
+let dead=+document.getElementById('deadSpace').value/100;
+let cellW=scan.img.width/grid.cols;
+let cellH=scan.img.height/grid.rows;
+
+for(let r=0;r<grid.rows;r++){
+for(let c=0;c<grid.cols;c++){
+let x=(align.offsetX+c*cellW*align.scaleX);
+let y=(align.offsetY+r*cellH*align.scaleY);
+let w=cellW*align.scaleX;
+let h=cellH*align.scaleY;
+
+let cx=x+w/2;
+let cy=y+h/2;
+let sw=w*dead;
+let sh=h*dead;
+
+try{
+let imgData=ctx.getImageData(cx-sw/2,cy-sh/2,sw,sh);
+colours.push(avgColour(imgData));
+}catch(e){
+colours.push({r:128,g:128,b:128});
+}
+}
+}
+return colours;
+}
+
+function avgColour(imgData){
+let r=0,g=0,b=0,cnt=0;
+for(let i=0;i<imgData.data.length;i+=4){
+r+=imgData.data[i];
+g+=imgData.data[i+1];
+b+=imgData.data[i+2];
+cnt++;
+}
+return{r:Math.round(r/cnt),g:Math.round(g/cnt),b:Math.round(b/cnt)};
+}
+
+function displayPalette(){
+let p=document.getElementById('palette');
+p.innerHTML='';
+pal.forEach((c,i)=>{
+let s=document.createElement('div');
+s.className='swatch';
+s.style.background=`rgb(${c.r},${c.g},${c.b})`;
+s.title=`#${i}: rgb(${c.r},${c.g},${c.b})`;
+s.onclick=()=>showSequence(c);
+p.appendChild(s);
+});
+}
+
+function showSequence(c){
+let key=`${c.r},${c.g},${c.b}`;
+let data=sequences.get(key);
+if(!data){msg(2,'Sequence not found','err');return;}
+document.getElementById('popRGB').textContent=`rgb(${c.r},${c.g},${c.b})`;
+document.getElementById('popSeq').textContent=`[${data.sequence.join(', ')}]`;
+let layersDiv=document.getElementById('popLayers');
+layersDiv.innerHTML='';
+data.sequence.forEach((fi,li)=>{
+let d=document.createElement('div');
+d.className='layer';
+if(fi===0){
+d.innerHTML=`<div class="layer-box" style="background:#fff;border:2px dashed #999"></div><span>Layer ${li}: Empty</span>`;
+}else{
+let col=data.colours[fi-1];
+d.innerHTML=`<div class="layer-box" style="background:${col.h}"></div><span>Layer ${li}: ${col.n}</span>`;
+}
+layersDiv.appendChild(d);
+});
+document.getElementById('popup').classList.add('show');
+}
+
+function closePopup(){
+document.getElementById('popup').classList.remove('show');
+}
+
+function removeDuplicates(){
+if(!pal)return;
+let unique=[],seen=new Set();
+pal.forEach(c=>{
+let key=`${c.r},${c.g},${c.b}`;
+if(!seen.has(key)){seen.add(key);unique.push(c);}
+});
+let removed=pal.length-unique.length;
+pal=unique;
+displayPalette();
+document.getElementById('uniqueCount').textContent=unique.length;
+document.getElementById('dupsCount').textContent=removed;
+msg(2,`✓ Removed ${removed} duplicates`,'ok');
+}
+
+function exportPalette(){
+if(!pal)return;
+let gpl=`GIMP Palette\nName: 4Colour\nColumns: 17\n#\n`;
+pal.forEach((c,i)=>{
+gpl+=`${c.r.toString().padStart(3)} ${c.g.toString().padStart(3)} ${c.b.toString().padStart(3)} C${i}\n`;
+});
+let blob=new Blob([gpl],{type:'text/plain'});
+saveAs(blob,'palette.gpl');
+msg(2,'✓ Exported','ok');
+}
+
+function exportComparison(){
+if(!pal||!grid)return;
+let csv='Index,Sequence,Expected,Measured\n';
+grid.seqs.forEach((seq,i)=>{
+if(i>=pal.length)return;
+let exp=simColour(seq,grid.colours);
+let meas=pal[i];
+csv+=`${i},"[${seq.join(' ')}]","${exp.r} ${exp.g} ${exp.b}","${meas.r} ${meas.g} ${meas.b}"\n`;
+});
+let blob=new Blob([csv],{type:'text/csv'});
+saveAs(blob,'comparison.csv');
+msg(2,'✓ Exported','ok');
+}
+
+function exportAlignment(){
+if(!grid||!scan)return;
+let data={alignment:align,grid:{rows:grid.rows,cols:grid.cols}};
+let blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+saveAs(blob,'alignment.json');
+msg(2,'✓ Exported','ok');
+}
+
+// STEP 3: QUANTISE
+function loadImage(){
+let f=document.getElementById('imgFile').files[0];
+if(!f)return;
+let r=new FileReader();
+r.onload=e=>{
+let img=new Image();
+img.onload=()=>{
+quant={img};
+document.getElementById('quantBtn').disabled=!pal;
+updateMinDetail();
+let qp=document.getElementById('quantPalette');
+qp.innerHTML='';
+if(pal){
+let maxC=+document.getElementById('maxColours').value;
+pal.slice(0,maxC).forEach(c=>{
+let s=document.createElement('div');
+s.className='swatch';
+s.style.background=`rgb(${c.r},${c.g},${c.b})`;
+s.style.width='30px';
+s.style.height='30px';
+qp.appendChild(s);
+});
+}
+};
+img.src=e.target.result;
+};
+r.readAsDataURL(f);
+}
+
+function updateMinDetail(){
+if(!quant)return;
+let pw=+document.getElementById('printW').value;
+let md=+document.getElementById('minDetail').value;
+let ppMM=quant.img.width/pw;
+let px=Math.round(md*ppMM);
+document.getElementById('minDetailPx').textContent=`≈${px}px`;
+}
+
+function quantiseImage(){
+if(!pal||!quant)return;
+msg(3,'Quantising...','info');
+
+setTimeout(()=>{
+try{
+let maxC=+document.getElementById('maxColours').value;
+let usePal=pal.slice(0,maxC);
+let dith=document.getElementById('dither').checked;
+let applyMin=document.getElementById('applyMinDetail').checked;
+
+let oc=document.getElementById('origCanvas');
+let octx=oc.getContext('2d');
+oc.width=quant.img.width;
+oc.height=quant.img.height;
+oc.style.width='100%';
+oc.style.height='100%';
+octx.drawImage(quant.img,0,0);
+
+let imgData=octx.getImageData(0,0,oc.width,oc.height);
+let mask=applyMin?applyMinDetailFilter(imgData,usePal):null;
+quantiseData(imgData,usePal,dith,mask);
+
+let qc=document.getElementById('quantCanvas');
+let qctx=qc.getContext('2d');
+qc.width=oc.width;
+qc.height=oc.height;
+qc.style.width='100%';
+qc.style.height='100%';
+qctx.putImageData(imgData,0,0);
+
+quant.result=imgData;
+quant.width=oc.width;
+quant.height=oc.height;
+
+document.getElementById('quantBox').classList.remove('hidden');
+generatePrintFiles();
+msg(3,'✓ Quantised','ok');
+}catch(e){
+msg(3,`Error: ${e.message}`,'err');
+}
+},100);
+}
+
+function applyMinDetailFilter(imgData,palette){
+let w=imgData.width;
+let h=imgData.height;
+let mask=new Uint8Array(w*h).fill(1);
+let pw=+document.getElementById('printW').value;
+let md=+document.getElementById('minDetail').value;
+let ppMM=w/pw;
+let minPx=Math.round(md*ppMM);
+
+for(let y=0;y<h;y++){
+for(let x=0;x<w;x++){
+let i=(y*w+x)*4;
+let c={r:imgData.data[i],g:imgData.data[i+1],b:imgData.data[i+2]};
+let closest=findClosest(c,palette);
+
+let same=0;
+for(let dy=-minPx;dy<=minPx;dy++){
+for(let dx=-minPx;dx<=minPx;dx++){
+let nx=x+dx,ny=y+dy;
+if(nx>=0&&nx<w&&ny>=0&&ny<h){
+let ni=(ny*w+nx)*4;
+let nc={r:imgData.data[ni],g:imgData.data[ni+1],b:imgData.data[ni+2]};
+let nClosest=findClosest(nc,palette);
+if(nClosest.r===closest.r&&nClosest.g===closest.g&&nClosest.b===closest.b)same++;
+}
+}
+}
+
+let threshold=(2*minPx+1)*(2*minPx+1)*0.5;
+if(same<threshold)mask[y*w+x]=0;
+}
+}
+
+return mask;
+}
+
+function quantiseData(imgData,palette,dither,mask){
+let d=imgData.data;
+let w=imgData.width;
+let h=imgData.height;
+
+for(let y=0;y<h;y++){
+for(let x=0;x<w;x++){
+let i=(y*w+x)*4;
+let r=d[i],g=d[i+1],b=d[i+2];
+
+if(mask&&mask[y*w+x]===0){
+let closest=findClosest({r,g,b},palette);
+d[i]=closest.r;
+d[i+1]=closest.g;
+d[i+2]=closest.b;
+d[i+3]=128;
+continue;
+}
+
+let closest=findClosest({r,g,b},palette);
+d[i]=closest.r;
+d[i+1]=closest.g;
+d[i+2]=closest.b;
+
+if(dither){
+let er=r-closest.r,eg=g-closest.g,eb=b-closest.b;
+distributeError(d,w,h,x,y,er,eg,eb);
+}
+}
+}
+}
+
+function findClosest(c,palette){
+let min=Infinity,closest=palette[0];
+palette.forEach(p=>{
+let dist=Math.sqrt((c.r-p.r)**2+(c.g-p.g)**2+(c.b-p.b)**2);
+if(dist<min){min=dist;closest=p;}
+});
+return closest;
+}
+
+function distributeError(d,w,h,x,y,er,eg,eb){
+let offsets=[{dx:1,dy:0,f:7/16},{dx:-1,dy:1,f:3/16},{dx:0,dy:1,f:5/16},{dx:1,dy:1,f:1/16}];
+offsets.forEach(({dx,dy,f})=>{
+let nx=x+dx,ny=y+dy;
+if(nx>=0&&nx<w&&ny>=0&&ny<h){
+let i=(ny*w+nx)*4;
+d[i]=Math.max(0,Math.min(255,d[i]+er*f));
+d[i+1]=Math.max(0,Math.min(255,d[i+1]+eg*f));
+d[i+2]=Math.max(0,Math.min(255,d[i+2]+eb*f));
+}
+});
+}
+
+function resetQuant(){
+quant=null;
+document.getElementById('imgFile').value='';
+document.getElementById('quantBox').classList.add('hidden');
+document.getElementById('printBox').classList.add('hidden');
+document.getElementById('quantBtn').disabled=true;
+}
+
+// STEP 4: PRINT FILES
+function generatePrintFiles(){
+if(!quant||!quant.result||!grid)return;
+
+let {result,width,height}=quant;
+let filLayers=[];
+
+sel.forEach((colIdx,i)=>{
+let c=document.createElement('canvas');
+c.width=width;
+c.height=height;
+let ctx=c.getContext('2d');
+let layerData=ctx.createImageData(width,height);
+
+for(let p=0;p<result.data.length;p+=4){
+let key=`${result.data[p]},${result.data[p+1]},${result.data[p+2]}`;
+let seqData=sequences.get(key);
+
+if(seqData){
+for(let li=0;li<seqData.sequence.length;li++){
+if(seqData.sequence[li]===i+1){
+layerData.data[p]=result.data[p];
+layerData.data[p+1]=result.data[p+1];
+layerData.data[p+2]=result.data[p+2];
+layerData.data[p+3]=255;
+break;
+}
+}
+}
+}
+
+ctx.putImageData(layerData,0,0);
+filLayers.push({
+name:`Filament_${COLOURS[colIdx].n.replace(/[^a-zA-Z0-9]/g,'_')}`,
+canvas:c,
+colour:COLOURS[colIdx]
+});
+});
+
+displayFilamentLayers(filLayers);
+document.getElementById('printBox').classList.remove('hidden');
+
+let pw=+document.getElementById('printW').value;
+let ph=pw*(height/width);
+document.getElementById('printW').textContent=pw.toFixed(1);
+document.getElementById('printH').textContent=ph.toFixed(1);
+document.getElementById('printL').textContent=filLayers.length;
+}
+
+function displayFilamentLayers(layers){
+let p=document.getElementById('layerPreview');
+p.innerHTML='';
+layers.forEach(l=>{
+let d=document.createElement('div');
+d.style.textAlign='center';
+let c=document.createElement('canvas');
+c.style.width='100px';
+c.style.border='1px solid #ccc';
+c.style.borderRadius='4px';
+c.width=l.canvas.width;
+c.height=l.canvas.height;
+c.getContext('2d').drawImage(l.canvas,0,0);
+let lbl=document.createElement('div');
+lbl.style.fontSize='0.7em';
+lbl.style.marginTop='4px';
+lbl.textContent=l.name;
+d.appendChild(c);
+d.appendChild(lbl);
+p.appendChild(d);
+});
+window.filamentLayers=layers;
+}
+
+function exportLayers(){
+if(!window.filamentLayers)return;
+window.filamentLayers.forEach(l=>{
+l.canvas.toBlob(blob=>saveAs(blob,`${l.name}.png`));
+});
+msg(4,`✓ Exported ${window.filamentLayers.length} layers`,'ok');
+}
+
+function exportPrintInfo(){
+if(!window.filamentLayers)return;
+let pw=+document.getElementById('printW').value;
+let info={
+dimensions:{width:pw,height:pw*(quant.height/quant.width),units:'mm'},
+filaments:window.filamentLayers.map(l=>({name:l.name,colour:l.colour.n})),
+settings:{layerH:document.getElementById('layerH').value}
+};
+let blob=new Blob([JSON.stringify(info,null,2)],{type:'application/json'});
+saveAs(blob,'print_info.json');
+msg(4,'✓ Exported','ok');
+}
+
+// UTILS
+function msg(step,text,type){
+let m=document.getElementById(`msg${step}`);
+m.textContent=text;
+m.className=`msg ${type}`;
+m.classList.remove('hidden');
+}
+
+window.onload=init;
+</script>
+</body>
+</html>
