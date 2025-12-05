@@ -219,9 +219,11 @@ Import GPL File
 <div class="stat"><div class="stat-val" id="printL">-</div><div class="stat-lbl">Layers</div></div>
 </div>
 <div class="btn-row">
-<button class="primary" onclick="exportLayers()">Export Layer PNGs</button>
+<button class="primary" onclick="exportArtworkSTLs()">Export Artwork STLs</button>
+<button onclick="exportLayers()">Export Layer PNGs (Legacy)</button>
 <button onclick="exportPrintInfo()">Export Print Info</button>
 </div>
+<p style="font-size:0.75em;margin-top:8px;color:#666">💡 <strong>Export Artwork STLs</strong> generates ready-to-print STL files. Each layer per filament is a separate file with vectorized geometry.</p>
 </div>
 
 <div id="msg4" class="msg hidden"></div>

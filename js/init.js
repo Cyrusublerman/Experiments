@@ -11,6 +11,7 @@ import { loadScan, setupScanDrag, analyseScan, toggleOverlay, updateAlign, reset
 import { loadImage, updateMinDetail, quantiseImage, resetQuant, updatePaletteSource, importGPLPalette } from './quantize.js';
 import { exportGridJSON, importGridJSON, exportReferenceImage, exportSTLs,
          exportPalette, exportComparison, exportAlignment, exportLayers, exportPrintInfo } from './export.js';
+import { exportArtworkSTLs } from './artwork-stl.js';
 
 /**
  * Initialize the application
@@ -66,6 +67,7 @@ export function init() {
 
     window.exportLayers = exportLayers;
     window.exportPrintInfo = exportPrintInfo;
+    window.exportArtworkSTLs = exportArtworkSTLs;
 
     window.closePopup = closePopup;
 
