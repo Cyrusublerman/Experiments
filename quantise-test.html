@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Quantization & Dithering Tool - Test Interface</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 0;
+            min-height: 600px;
+        }
+
+        .controls-panel {
+            background: #f8f9fa;
+            padding: 25px;
+            border-right: 1px solid #dee2e6;
+            overflow-y: auto;
+            max-height: calc(100vh - 200px);
+        }
+
+        .preview-panel {
+            padding: 25px;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .control-section {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .control-section:last-child {
+            border-bottom: none;
+        }
+
+        .control-section h3 {
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            color: #495057;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-section h3::before {
+            content: "▸";
+            color: #667eea;
+            font-size: 1.2em;
+        }
+
+        label {
+            display: block;
+            font-size: 0.9em;
+            color: #495057;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px dashed #667eea;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        input[type="file"]:hover {
+            background: #f8f9fa;
+            border-color: #764ba2;
+        }
+
+        select, input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            font-size: 0.9em;
+            background: white;
+        }
+
+        select:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        .slider-container {
+            margin-bottom: 15px;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .slider-value {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 1em;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 10px;
+        }
+
+        button:last-child {
+            margin-bottom: 0;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #5a6268;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #218838;
+        }
+
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .btn-warning:hover:not(:disabled) {
+            background: #e0a800;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .custom-palette-tools {
+            display: none;
+            background: white;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 10px;
+            border: 1px solid #dee2e6;
+        }
+
+        .color-input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        input[type="color"] {
+            width: 60px;
+            height: 40px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        #custom-hex-input {
+            flex: 1;
+        }
+
+        #palette-swatch-display {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 15px;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+            min-height: 50px;
+            border: 1px solid #dee2e6;
+        }
+
+        .swatch {
+            width: 40px;
+            height: 40px;
+            border-radius: 4px;
+            border: 2px solid #dee2e6;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.2s;
+        }
+
+        .swatch:hover {
+            transform: scale(1.1);
+            border-color: #667eea;
+        }
+
+        .remove-color-btn {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #dc3545;
+            color: white;
+            border: 2px solid white;
+            font-size: 14px;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+        }
+
+        .remove-color-btn:hover {
+            background: #c82333;
+        }
+
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+        }
+
+        input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .checkbox-container label {
+            margin: 0;
+            cursor: pointer;
+        }
+
+        #canvas {
+            max-width: 100%;
+            max-height: calc(100vh - 300px);
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            background: #f8f9fa;
+        }
+
+        #canvas.eyedropper-active {
+            cursor: crosshair;
+        }
+
+        .canvas-container {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .canvas-container.processing::after {
+            content: "Processing...";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(102, 126, 234, 0.95);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.2em;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        #status-message {
+            padding: 12px 20px;
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #495057;
+            margin-top: 15px;
+            width: 100%;
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .action-buttons button {
+            margin: 0;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .controls-panel {
+                border-right: none;
+                border-bottom: 1px solid #dee2e6;
+                max-height: none;
+            }
+        }
+
+        footer {
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+
+        .info-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            margin-top: 10px;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎨 Image Quantization & Dithering Tool</h1>
+            <p>Advanced color quantization with LAB color space and smart dithering</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Controls Panel -->
+            <aside class="controls-panel">
+                <!-- Image Upload -->
+                <div class="control-section">
+                    <h3>Load Image</h3>
+                    <label for="image-input">Select Image File:</label>
+                    <input type="file" id="image-input" accept="image/*">
+                </div>
+
+                <!-- Palette Selection -->
+                <div class="control-section">
+                    <h3>Palette Selection</h3>
+                    <label for="palette-select">Choose Palette:</label>
+                    <select id="palette-select">
+                        <option value="1bit">1-bit (2 colors)</option>
+                        <option value="2bit">2-bit (4 colors - grayscale)</option>
+                        <option value="3bit">3-bit (8 colors - RGB)</option>
+                        <option value="3bit-gray">3-bit (8 colors - grayscale)</option>
+                        <option value="nes">NES Palette</option>
+                        <option value="gameboy">Game Boy</option>
+                        <option value="primaries">Primaries (RGB + B&W)</option>
+                        <option value="pastel">Pastel</option>
+                        <option value="ggost">GGOST (17 colors)</option>
+                        <option value="custom">Custom Palette</option>
+                    </select>
+
+                    <div id="custom-palette-tools" class="custom-palette-tools">
+                        <label>Add Color:</label>
+                        <div class="color-input-group">
+                            <input type="color" id="custom-color-picker" value="#000000">
+                            <input type="text" id="custom-hex-input" value="#000000" placeholder="#RRGGBB">
+                        </div>
+                        <button type="button" id="add-color-button" class="btn-primary">Add Color</button>
+                        <button type="button" id="eyedropper-button" class="btn-secondary">Pick Color from Image (Eyedropper)</button>
+                        <label style="margin-top: 15px;">Load Palette File:</label>
+                        <input type="file" id="palette-file-input" accept=".gpl,.txt,.pal">
+                        <div class="info-box">
+                            Supports GIMP .gpl files and text files with hex codes
+                        </div>
+                    </div>
+
+                    <div id="palette-swatch-display"></div>
+                </div>
+
+                <!-- Image Adjustments -->
+                <div class="control-section">
+                    <h3>Image Adjustments</h3>
+
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <label for="gamma-slider">Gamma:</label>
+                            <span class="slider-value" id="gamma-value">1.0</span>
+                        </div>
+                        <input type="range" id="gamma-slider" min="0.1" max="3.0" step="0.1" value="1.0">
+                    </div>
+
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <label for="contrast-slider">Contrast:</label>
+                            <span class="slider-value" id="contrast-value">100%</span>
+                        </div>
+                        <input type="range" id="contrast-slider" min="50" max="200" step="5" value="100">
+                    </div>
+
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <label for="saturation-slider">Saturation:</label>
+                            <span class="slider-value" id="saturation-value">100%</span>
+                        </div>
+                        <input type="range" id="saturation-slider" min="0" max="200" step="5" value="100">
+                    </div>
+
+                    <button type="button" id="reset-adjustments-button" class="btn-secondary">Reset Adjustments</button>
+                </div>
+
+                <!-- Dithering Options -->
+                <div class="control-section">
+                    <h3>Dithering</h3>
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="dithering-enable" checked>
+                        <label for="dithering-enable">Enable Smart Dithering</label>
+                    </div>
+                    <div class="info-box">
+                        Uses "Nearest + Opposite (Checked)" algorithm with blue noise texture
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="control-section">
+                    <h3>Actions</h3>
+                    <button type="button" id="process-button" class="btn-primary" disabled>🚀 Process Image</button>
+                    <div class="action-buttons">
+                        <button type="button" id="undo-button" class="btn-secondary" disabled>↶ Undo</button>
+                        <button type="button" id="download-button" class="btn-success" disabled>💾 Download</button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Preview Panel -->
+            <main class="preview-panel">
+                <div class="canvas-container">
+                    <canvas id="canvas" width="800" height="600"></canvas>
+                </div>
+                <div id="status-message">Ready. Please load an image to begin.</div>
+            </main>
+        </div>
+
+        <footer>
+            <p>Image Quantization & Dithering Tool | Test Interface | Generated: 2025</p>
+            <p style="margin-top: 5px; font-size: 0.8em;">Using LAB color space for perceptually accurate color matching</p>
+        </footer>
+    </div>
+
+    <!-- Load the quantise.js script -->
+    <script src="quantise.js"></script>
+</body>
+</html>
