@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4-Colour FDM Workflow - Modular</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="container">
+<h1>4-Colour FDM Print Workflow</h1>
+
+<!-- STEP 1 -->
+<div class="section">
+<h2>Step 1: Generate Calibration Grid</h2>
+
+<div class="box">
+<h3>Select Filament Colours (2-10) - Selected: <span id="selCount">0</span></h3>
+<div id="colourGrid" class="colour-grid"></div>
+</div>
+
+<div class="grid-2">
+<div class="box">
+<h3>Dimensions</h3>
+<label>Bed: <input type="number" id="bedW" value="256" min="100">×<input type="number" id="bedH" value="256" min="100">mm</label>
+<label>Scan (A4): <input type="number" id="scanW" value="210" min="100">×<input type="number" id="scanH" value="297" min="100">mm</label>
+<label>Tile Size: <input type="number" id="tileSize" value="10" min="2" max="20" step="0.5">mm</label>
+<label>Gap: <input type="number" id="gap" value="1" min="0" max="5" step="0.5">mm</label>
+</div>
+
+<div class="box">
+<h3>Grid Config</h3>
+<label>Layers/Cell: <input type="number" id="layers" value="4" min="1" max="10"></label>
+<label>Layer Height: <input type="number" id="layerH" value="0.08" min="0.04" max="0.4" step="0.01">mm</label>
+<label>Base Layers: <input type="number" id="baseLayers" value="3" min="0" max="10"></label>
+<label>Base Colour:
+<select id="baseColour">
+<option value="-1">White (default)</option>
+</select>
+</label>
+<label><input type="checkbox" id="fillRect" checked> Fill Rectangle Base</label>
+</div>
+</div>
+
+<div class="btn-row">
+<button class="primary" onclick="generateGrid()">Generate Grid</button>
+<button onclick="exportGridJSON()">Export Grid JSON</button>
+<button onclick="document.getElementById('importJSON').click()">Import Grid JSON</button>
+<input type="file" id="importJSON" accept=".json" style="display:none" onchange="importGridJSON()">
+<button onclick="exportSTLs()">Export STLs</button>
+<button onclick="exportReferenceImage()">Export Reference Image</button>
+</div>
+
+<div id="gridBox" class="box hidden">
+<h3>Generated Grid Preview (click tiles to see sequences)</h3>
+<div class="canvas-wrap">
+<canvas id="gridCanvas"></canvas>
+<div class="viewer-ctrl">
+<button onclick="zoomGrid(1.2)">Zoom +</button>
+<button onclick="zoomGrid(0.8)">Zoom −</button>
+<button onclick="resetGridView()">Reset</button>
+</div>
+</div>
+<div class="stats">
+<div class="stat"><div class="stat-val" id="totSeqs">0</div><div class="stat-lbl">Sequences</div></div>
+<div class="stat"><div class="stat-val" id="gridRows">0</div><div class="stat-lbl">Rows</div></div>
+<div class="stat"><div class="stat-val" id="gridCols">0</div><div class="stat-lbl">Columns</div></div>
+<div class="stat"><div class="stat-val" id="gridDims">0×0mm</div><div class="stat-lbl">Size</div></div>
+</div>
+</div>
+
+<div id="msg1" class="msg hidden"></div>
+</div>
+
+<!-- STEP 2 -->
+<div class="section">
+<h2>Step 2: Scan Analysis & Alignment</h2>
+
+<div class="box">
+<h3>Upload Scan</h3>
+<input type="file" id="scanFile" accept="image/*">
+<label>Dead Space: <input type="number" id="deadSpace" value="60" min="20" max="90">%</label>
+</div>
+
+<div class="btn-row">
+<button class="primary" id="analyseBtn" onclick="analyseScan()" disabled>Analyse Scan</button>
+<button id="overlayBtn" onclick="toggleOverlay()" disabled>Toggle Grid Overlay</button>
+<button onclick="exportAlignment()">Export Alignment</button>
+<button onclick="removeDuplicates()">Remove Duplicates</button>
+</div>
+
+<div id="scanBox" class="box hidden">
+<h3>Scan with Interactive Alignment</h3>
+<div class="canvas-wrap">
+<canvas id="scanCanvas"></canvas>
+<div class="viewer-ctrl">
+<button onclick="zoomScan(1.2)">Zoom +</button>
+<button onclick="zoomScan(0.8)">Zoom −</button>
+<button onclick="panScan(-50,0)">◀</button>
+<button onclick="panScan(50,0)">▶</button>
+<button onclick="panScan(0,-50)">▲</button>
+<button onclick="panScan(0,50)">▼</button>
+<button onclick="resetScanView()">Reset</button>
+</div>
+</div>
+
+<div class="align-box">
+<h4>🎯 Grid Alignment Controls (drag grid or use inputs)</h4>
+<div class="align-inputs">
+<div><label>X Offset</label><input type="number" id="offsetX" value="0" step="1" oninput="updateAlign()"></div>
+<div><label>Y Offset</label><input type="number" id="offsetY" value="0" step="1" oninput="updateAlign()"></div>
+<div><label>Scale X</label><input type="number" id="scaleX" value="1" step="0.01" min="0.1" max="5" oninput="updateAlign()"></div>
+<div><label>Scale Y</label><input type="number" id="scaleY" value="1" step="0.01" min="0.1" max="5" oninput="updateAlign()"></div>
+</div>
+<div style="display:flex;gap:8px;margin-top:8px">
+<button onclick="autoScale()">Auto-Scale from A4</button>
+<button onclick="resetAlign()">Reset Alignment</button>
+</div>
+<p style="font-size:0.75em;margin-top:8px;color:#666">💡 Click "Auto-Scale" to calculate from A4 dimensions automatically</p>
+</div>
+
+<div class="stats">
+<div class="stat"><div class="stat-val" id="scannedCount">0</div><div class="stat-lbl">Scanned</div></div>
+<div class="stat"><div class="stat-val" id="uniqueCount">0</div><div class="stat-lbl">Unique</div></div>
+<div class="stat"><div class="stat-val" id="dupsCount">0</div><div class="stat-lbl">Duplicates</div></div>
+</div>
+
+<h4>Extracted Palette (click to see sequence)</h4>
+<div id="palette" class="palette"></div>
+
+<div class="btn-row">
+<button onclick="exportPalette()">Export Palette (GPL)</button>
+<button onclick="exportComparison()">Export Comparison (CSV)</button>
+</div>
+</div>
+
+<div id="msg2" class="msg hidden"></div>
+</div>
+
+<!-- STEP 3 -->
+<div class="section">
+<h2>Step 3: Image Quantisation</h2>
+
+<div class="box">
+<h3>Load Image</h3>
+<input type="file" id="imgFile" accept="image/*">
+</div>
+
+<div class="box">
+<h3>Palette Source</h3>
+<label>
+<input type="radio" name="palSrc" value="extracted" checked onchange="updatePaletteSource()">
+Use Extracted Palette (from scan)
+</label>
+<label>
+<input type="radio" name="palSrc" value="imported" onchange="updatePaletteSource()">
+Import GPL Palette
+</label>
+<input type="file" id="importGPL" accept=".gpl" style="display:none" onchange="importGPLPalette()">
+<button id="importGPLBtn" onclick="document.getElementById('importGPL').click()" disabled>
+Import GPL File
+</button>
+<div id="paletteSummary" style="margin-top:8px;font-size:0.85em;color:#666"></div>
+</div>
+
+<div class="grid-2">
+<div class="box">
+<h3>Options</h3>
+<label>Print Width: <input type="number" id="printW" value="170" min="10" max="500">mm</label>
+<label>Max Colours: <input type="number" id="maxColours" value="4" min="2" max="340"></label>
+<label>Min Detail: <input type="number" id="minDetail" value="1.0" min="0.1" max="10" step="0.1">mm <small id="minDetailPx">≈10px</small></label>
+<label><input type="checkbox" id="dither" checked> Floyd-Steinberg Dither</label>
+<label><input type="checkbox" id="applyMinDetail" checked> Apply Min Detail Filter</label>
+</div>
+
+<div class="box">
+<h3>Palette Preview</h3>
+<div id="quantPalette" class="palette"></div>
+</div>
+</div>
+
+<div class="btn-row">
+<button class="primary" id="quantBtn" onclick="quantiseImage()" disabled>Quantise Image</button>
+<button onclick="resetQuant()">Reset</button>
+</div>
+
+<div id="quantBox" class="box hidden">
+<h3>Results</h3>
+<div class="grid-2">
+<div>
+<h4>Original</h4>
+<div class="canvas-wrap" style="height:400px">
+<canvas id="origCanvas"></canvas>
+</div>
+</div>
+<div>
+<h4>Quantised</h4>
+<div class="canvas-wrap" style="height:400px">
+<canvas id="quantCanvas"></canvas>
+</div>
+</div>
+</div>
+</div>
+
+<div id="msg3" class="msg hidden"></div>
+</div>
+
+<!-- STEP 4 -->
+<div class="section">
+<h2>Step 4: Export Print Files</h2>
+
+<div id="printBox" class="box hidden">
+<h3>Filament Layers</h3>
+<div id="layerPreview" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px"></div>
+<div class="stats">
+<div class="stat"><div class="stat-val" id="printW">-</div><div class="stat-lbl">Width (mm)</div></div>
+<div class="stat"><div class="stat-val" id="printH">-</div><div class="stat-lbl">Height (mm)</div></div>
+<div class="stat"><div class="stat-val" id="printL">-</div><div class="stat-lbl">Layers</div></div>
+</div>
+<div class="btn-row">
+<button class="primary" onclick="exportLayers()">Export Layer PNGs</button>
+<button onclick="exportPrintInfo()">Export Print Info</button>
+</div>
+</div>
+
+<div id="msg4" class="msg hidden"></div>
+</div>
+
+</div>
+
+<!-- POPUP -->
+<div id="popup" class="popup">
+<button class="close" onclick="closePopup()">×</button>
+<h4>Sequence Details</h4>
+<div class="seq-info">
+<div><strong>RGB:</strong> <span id="popRGB">-</span></div>
+<div><strong>Sequence:</strong> <span id="popSeq">-</span></div>
+</div>
+<div id="popLayers" class="layers"></div>
+</div>
+
+<!-- Hidden work canvas -->
+<canvas id="work" style="display:none"></canvas>
+
+<!-- Scripts -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script type="module" src="js/init.js"></script>
+</body>
+</html>
