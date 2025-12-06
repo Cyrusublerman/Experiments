@@ -478,9 +478,16 @@ function initButtonHandlers() {
   document.getElementById('exportGridSTLs')?.addEventListener('click', () => console.log('Export grid STLs'));
 
   // Scan tab
-  document.getElementById('analyseExtractPalette')?.addEventListener('click', () => console.log('Analyse & extract'));
-  document.getElementById('autoAlign')?.addEventListener('click', () => console.log('Auto-align'));
-  document.getElementById('resetAlignment')?.addEventListener('click', () => console.log('Reset alignment'));
+  document.getElementById('analyseExtractPalette')?.addEventListener('click', analyseScan);
+  document.getElementById('autoAlign')?.addEventListener('click', autoAlign);
+  document.getElementById('resetAlignment')?.addEventListener('click', resetAlignment);
+  document.getElementById('removeDuplicates')?.addEventListener('click', removeDuplicateColours);
+
+  // Alignment inputs
+  document.getElementById('alignOffsetX')?.addEventListener('input', updateAlignmentFromInputs);
+  document.getElementById('alignOffsetY')?.addEventListener('input', updateAlignmentFromInputs);
+  document.getElementById('alignScaleX')?.addEventListener('input', updateAlignmentFromInputs);
+  document.getElementById('alignScaleY')?.addEventListener('input', updateAlignmentFromInputs);
 
   // Image Process tab
   document.getElementById('quantiseImage')?.addEventListener('click', () => console.log('Quantise image'));
@@ -1019,6 +1026,505 @@ function drawXYConfigViz() {
   canvas.style.width = '100%';
   canvas.style.height = '100%';
   viz.appendChild(canvas);
+}
+
+// ============================================================================
+// TAB 2: SCAN ANALYSIS
+// ============================================================================
+
+/**
+ * Handle scan file upload
+ */
+function handleScanUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const scan = {
+        id: Date.now(),
+        filename: file.name,
+        image: img,
+        thumbnail: null,
+        alignment: { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 },
+        palette: null
+      };
+
+      // Generate thumbnail
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 48;
+      thumbCanvas.height = 48;
+      const thumbCtx = thumbCanvas.getContext('2d');
+      thumbCtx.drawImage(img, 0, 0, 48, 48);
+      scan.thumbnail = thumbCanvas.toDataURL();
+
+      // Add to scans
+      state.scans.push(scan);
+      state.activeScan = scan;
+
+      // Update UI
+      renderScanList();
+      drawScanCanvas();
+
+      // Auto-align if grid exists
+      if (state.grid) {
+        autoAlign();
+      }
+
+      showMessage(`✓ Loaded scan: ${file.name} (${img.width}×${img.height}px)`, 'success');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+/**
+ * Render the scan list
+ */
+function renderScanList() {
+  const scanList = document.getElementById('scanList');
+
+  if (state.scans.length === 0) {
+    scanList.innerHTML = '<p class="placeholder">No scans loaded</p>';
+    return;
+  }
+
+  scanList.innerHTML = '';
+  state.scans.forEach(scan => {
+    const item = document.createElement('div');
+    item.className = 'scan-item';
+    if (scan === state.activeScan) {
+      item.style.border = '2px solid var(--primary)';
+    }
+
+    item.innerHTML = `
+      <img src="${scan.thumbnail}" class="scan-thumbnail" alt="${scan.filename}">
+      <div class="scan-info">
+        <div class="scan-filename">${scan.filename}</div>
+      </div>
+      <button class="btn-destructive" title="Delete">×</button>
+    `;
+
+    // Click to select
+    item.addEventListener('click', (e) => {
+      if (!e.target.classList.contains('btn-destructive')) {
+        state.activeScan = scan;
+        renderScanList();
+        drawScanCanvas();
+        updateAlignmentInputs();
+      }
+    });
+
+    // Delete button
+    item.querySelector('.btn-destructive').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const idx = state.scans.indexOf(scan);
+      state.scans.splice(idx, 1);
+      if (state.activeScan === scan) {
+        state.activeScan = state.scans[0] || null;
+      }
+      renderScanList();
+      drawScanCanvas();
+    });
+
+    scanList.appendChild(item);
+  });
+}
+
+/**
+ * Draw the scan canvas with optional grid overlay
+ */
+function drawScanCanvas() {
+  const canvas = document.getElementById('scanCanvas');
+  const ctx = canvas.getContext('2d');
+
+  if (!state.activeScan) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    canvas.width = 800;
+    canvas.height = 600;
+    return;
+  }
+
+  const scan = state.activeScan;
+  const img = scan.image;
+  const container = canvas.parentElement;
+
+  // Fit to container
+  const scale = Math.min(
+    container.clientWidth / img.width,
+    (container.clientHeight - 100) / img.height
+  );
+
+  canvas.width = container.clientWidth;
+  canvas.height = container.clientHeight - 100;
+
+  const imgW = img.width * scale;
+  const imgH = img.height * scale;
+  const imgX = (canvas.width - imgW) / 2;
+  const imgY = (canvas.height - imgH) / 2;
+
+  // Clear and draw background
+  ctx.fillStyle = '#f5f5f5';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Draw scan image
+  ctx.drawImage(img, imgX, imgY, imgW, imgH);
+
+  // Draw grid overlay if enabled and grid exists
+  if (state.ui.showScanOverlay && state.grid) {
+    drawScanOverlay(ctx, imgX, imgY, scale);
+  }
+
+  // Update metrics
+  updateScanMetrics();
+}
+
+/**
+ * Draw grid overlay on scan
+ */
+function drawScanOverlay(ctx, imgX, imgY, imgScale) {
+  if (!state.grid || !state.activeScan) return;
+
+  const scan = state.activeScan;
+  const { offsetX, offsetY, scaleX, scaleY } = scan.alignment;
+  const deadSpace = +document.getElementById('deadSpace').value / 100;
+
+  ctx.save();
+  ctx.translate(imgX + offsetX * imgScale, imgY + offsetY * imgScale);
+  ctx.scale(scaleX * imgScale, scaleY * imgScale);
+
+  const cellW = scan.image.width / state.grid.cols;
+  const cellH = scan.image.height / state.grid.rows;
+
+  for (let r = 0; r < state.grid.rows; r++) {
+    for (let c = 0; c < state.grid.cols; c++) {
+      const cellIdx = r * state.grid.cols + c;
+      const x = c * cellW;
+      const y = r * cellH;
+
+      // Check if empty cell
+      if (state.grid.empty_cells && state.grid.empty_cells.includes(cellIdx)) {
+        // Grey border for empty
+        ctx.strokeStyle = 'rgba(128, 128, 128, 0.8)';
+        ctx.lineWidth = 3 / imgScale;
+        ctx.strokeRect(x, y, cellW, cellH);
+
+        // X mark
+        ctx.strokeStyle = '#888';
+        ctx.lineWidth = 2 / imgScale;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + cellW, y + cellH);
+        ctx.moveTo(x + cellW, y);
+        ctx.lineTo(x, y + cellH);
+        ctx.stroke();
+      } else {
+        // Red border for filled
+        ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
+        ctx.lineWidth = 2 / imgScale;
+        ctx.strokeRect(x, y, cellW, cellH);
+
+        // Green sampling area
+        const dx = cellW * (1 - deadSpace) / 2;
+        const dy = cellH * (1 - deadSpace) / 2;
+        ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)';
+        ctx.lineWidth = 1 / imgScale;
+        ctx.strokeRect(x + dx, y + dy, cellW * deadSpace, cellH * deadSpace);
+      }
+    }
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Toggle scan overlay visibility
+ */
+function toggleScanOverlay() {
+  if (!state.ui) state.ui = {};
+  state.ui.showScanOverlay = !state.ui.showScanOverlay;
+  drawScanCanvas();
+}
+
+/**
+ * Update alignment from input fields
+ */
+function updateAlignmentFromInputs() {
+  if (!state.activeScan) return;
+
+  state.activeScan.alignment = {
+    offsetX: +document.getElementById('alignOffsetX').value,
+    offsetY: +document.getElementById('alignOffsetY').value,
+    scaleX: +document.getElementById('alignScaleX').value,
+    scaleY: +document.getElementById('alignScaleY').value
+  };
+
+  drawScanCanvas();
+}
+
+/**
+ * Update alignment input fields
+ */
+function updateAlignmentInputs() {
+  if (!state.activeScan) return;
+
+  const { offsetX, offsetY, scaleX, scaleY } = state.activeScan.alignment;
+  document.getElementById('alignOffsetX').value = offsetX;
+  document.getElementById('alignOffsetY').value = offsetY;
+  document.getElementById('alignScaleX').value = scaleX.toFixed(3);
+  document.getElementById('alignScaleY').value = scaleY.toFixed(3);
+}
+
+/**
+ * Auto-calculate alignment from A4 dimensions
+ */
+function autoAlign() {
+  if (!state.activeScan || !state.grid) {
+    showMessage('Need both scan and grid to auto-align', 'error');
+    return;
+  }
+
+  const scan = state.activeScan;
+  const scanW = +document.getElementById('scanW').value;
+  const scanH = +document.getElementById('scanH').value;
+
+  // Pixels per mm
+  const pxPerMM_X = scan.image.width / scanW;
+  const pxPerMM_Y = scan.image.height / scanH;
+
+  // Grid dimensions in mm
+  const gridMM_W = state.grid.cols * (state.grid.tile + state.grid.gap) - state.grid.gap;
+  const gridMM_H = state.grid.rows * (state.grid.tile + state.grid.gap) - state.grid.gap;
+
+  // Grid dimensions in pixels
+  const gridPX_W = gridMM_W * pxPerMM_X;
+  const gridPX_H = gridMM_H * pxPerMM_Y;
+
+  // Calculate scale
+  const scaleX = gridPX_W / scan.image.width;
+  const scaleY = gridPX_H / scan.image.height;
+
+  // Center alignment
+  const offsetX = (scan.image.width - gridPX_W / scaleX) / 2;
+  const offsetY = (scan.image.height - gridPX_H / scaleY) / 2;
+
+  scan.alignment = { scaleX, scaleY, offsetX, offsetY };
+
+  updateAlignmentInputs();
+  drawScanCanvas();
+
+  showMessage('✓ Auto-aligned from A4 dimensions', 'success');
+}
+
+/**
+ * Reset alignment to defaults
+ */
+function resetAlignment() {
+  if (!state.activeScan) return;
+
+  state.activeScan.alignment = {
+    offsetX: 0,
+    offsetY: 0,
+    scaleX: 1,
+    scaleY: 1
+  };
+
+  updateAlignmentInputs();
+  drawScanCanvas();
+}
+
+/**
+ * Analyse scan and extract palette
+ */
+function analyseScan() {
+  if (!state.activeScan || !state.grid) {
+    showMessage('Need both scan and grid to analyse', 'error');
+    return;
+  }
+
+  showMessage('Analysing scan...', 'info');
+
+  setTimeout(() => {
+    try {
+      const palette = extractColours();
+      state.activeScan.palette = palette;
+      state.palette = palette;
+
+      renderPaletteStrip();
+      updateScanMetrics();
+
+      showMessage(`✓ Extracted ${palette.length} colours`, 'success');
+    } catch (e) {
+      showMessage(`Error: ${e.message}`, 'error');
+      console.error(e);
+    }
+  }, 100);
+}
+
+/**
+ * Extract colours from scan
+ */
+function extractColours() {
+  const scan = state.activeScan;
+  const { offsetX, offsetY, scaleX, scaleY } = scan.alignment;
+  const deadSpace = +document.getElementById('deadSpace').value / 100;
+
+  // Create work canvas
+  const workCanvas = document.getElementById('workCanvas');
+  const ctx = workCanvas.getContext('2d');
+  workCanvas.width = scan.image.width;
+  workCanvas.height = scan.image.height;
+  ctx.drawImage(scan.image, 0, 0);
+
+  const colours = [];
+  const cellW = scan.image.width / state.grid.cols;
+  const cellH = scan.image.height / state.grid.rows;
+
+  for (let r = 0; r < state.grid.rows; r++) {
+    for (let c = 0; c < state.grid.cols; c++) {
+      const cellIdx = r * state.grid.cols + c;
+
+      // Skip empty cells
+      if (state.grid.empty_cells && state.grid.empty_cells.includes(cellIdx)) {
+        continue;
+      }
+
+      const x = offsetX + c * cellW * scaleX;
+      const y = offsetY + r * cellH * scaleY;
+      const w = cellW * scaleX;
+      const h = cellH * scaleY;
+
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      const sw = w * deadSpace;
+      const sh = h * deadSpace;
+
+      try {
+        const imgData = ctx.getImageData(cx - sw / 2, cy - sh / 2, sw, sh);
+        const rgb = avgColour(imgData);
+        colours.push(rgb);
+
+        // Store in sequences map
+        const key = rgb_to_key(rgb);
+        state.sequences.set(key, {
+          sequence: state.grid.seqs[cellIdx],
+          colours: state.grid.colours,
+          grid_position: { row: r, col: c, index: cellIdx }
+        });
+      } catch (e) {
+        colours.push({r: 128, g: 128, b: 128});
+      }
+    }
+  }
+
+  return colours;
+}
+
+/**
+ * Calculate average colour from image data
+ */
+function avgColour(imgData) {
+  let r = 0, g = 0, b = 0, cnt = 0;
+  for (let i = 0; i < imgData.data.length; i += 4) {
+    r += imgData.data[i];
+    g += imgData.data[i + 1];
+    b += imgData.data[i + 2];
+    cnt++;
+  }
+  return {
+    r: Math.round(r / cnt),
+    g: Math.round(g / cnt),
+    b: Math.round(b / cnt)
+  };
+}
+
+/**
+ * Render palette strip
+ */
+function renderPaletteStrip() {
+  const strip = document.getElementById('paletteStrip');
+
+  if (!state.palette || state.palette.length === 0) {
+    strip.innerHTML = '<p class="placeholder">Palette will appear after analysis</p>';
+    return;
+  }
+
+  strip.innerHTML = '';
+  state.palette.forEach((c, i) => {
+    const swatch = document.createElement('div');
+    swatch.className = 'palette-swatch';
+    swatch.style.background = `rgb(${c.r},${c.g},${c.b})`;
+    swatch.title = `#${i}: rgb(${c.r},${c.g},${c.b})`;
+
+    // Click to show sequence
+    swatch.addEventListener('click', () => {
+      const key = rgb_to_key(c);
+      const data = state.sequences.get(key);
+
+      if (data) {
+        showSequencePopup(data.sequence, data.grid_position);
+      }
+    });
+
+    strip.appendChild(swatch);
+  });
+}
+
+/**
+ * Update scan metrics display
+ */
+function updateScanMetrics() {
+  if (!state.activeScan) {
+    document.getElementById('metricScanned').textContent = '0';
+    document.getElementById('metricUnique').textContent = '0';
+    document.getElementById('metricDups').textContent = '0';
+    document.getElementById('metricPxMm').textContent = '—';
+    return;
+  }
+
+  const palette = state.palette || [];
+  const scan = state.activeScan;
+  const scanW = +document.getElementById('scanW').value;
+
+  // Calculate px/mm
+  const pxMm = (scan.image.width / scanW).toFixed(2);
+
+  document.getElementById('metricScanned').textContent = palette.length;
+  document.getElementById('metricUnique').textContent = palette.length; // TODO: Calculate actual unique
+  document.getElementById('metricDups').textContent = '0'; // TODO: Calculate duplicates
+  document.getElementById('metricPxMm').textContent = pxMm;
+}
+
+/**
+ * Remove duplicate colours from palette
+ */
+function removeDuplicateColours() {
+  if (!state.palette) return;
+
+  const unique = [];
+  const seen = new Set();
+
+  state.palette.forEach(c => {
+    const key = rgb_to_key(c);
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(c);
+    }
+  });
+
+  const removed = state.palette.length - unique.length;
+  state.palette = unique;
+
+  if (state.activeScan) {
+    state.activeScan.palette = unique;
+  }
+
+  renderPaletteStrip();
+  updateScanMetrics();
+
+  showMessage(`✓ Removed ${removed} duplicates`, 'success');
 }
 
 // ============================================================================
