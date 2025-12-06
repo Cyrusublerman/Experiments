@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4-Colour FDM Workflow</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-image2print-modular-01UCd6FvZsXqJ71x6cydW1Bf/app-styles.css">
+</head>
+<body>
+
+<!-- Loading indicator -->
+<div id="loading" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); color: white; display: flex; align-items: center; justify-content: center; z-index: 9999; font-family: monospace;">
+  <div style="text-align: center;">
+    <div style="font-size: 24px; margin-bottom: 12px;">🎨 Loading...</div>
+    <div style="font-size: 14px;">4-Colour FDM Workflow</div>
+  </div>
+</div>
+
+<!-- App container (will be populated by loaded HTML) -->
+<div id="app"></div>
+
+<!-- Load HTML structure from GitHub -->
+<script>
+fetch('https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-image2print-modular-01UCd6FvZsXqJ71x6cydW1Bf/app.html')
+  .then(r => r.text())
+  .then(html => {
+    // Extract body content
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const bodyContent = doc.body.innerHTML;
+
+    // Inject into app container
+    document.getElementById('app').innerHTML = bodyContent;
+
+    // Hide loading indicator
+    document.getElementById('loading').style.display = 'none';
+
+    console.log('✅ HTML loaded from GitHub');
+  })
+  .catch(err => {
+    document.getElementById('loading').innerHTML = `
+      <div style="text-align: center; color: #ff6b6b;">
+        <div style="font-size: 24px; margin-bottom: 12px;">❌ Error</div>
+        <div style="font-size: 14px;">Failed to load app from GitHub</div>
+        <div style="font-size: 12px; margin-top: 8px; opacity: 0.7;">${err.message}</div>
+      </div>
+    `;
+  });
+</script>
+
+<!-- External dependencies -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
+
+<!-- Main app JS from GitHub -->
+<script type="module" src="https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-image2print-modular-01UCd6FvZsXqJ71x6cydW1Bf/app.js"></script>
+
+</body>
+</html>
