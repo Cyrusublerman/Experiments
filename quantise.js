@@ -187,37 +187,6 @@
         return Math.max(min, Math.min(value, max));
     }
 
-    // --- Vector Math Helpers for LAB ---
-    function vecDot(vA, vB) { return (vA.L * vB.L) + (vA.a * vB.a) + (vA.b * vB.b); }
-    function vecSub(vA, vB) { return { L: vA.L - vB.L, a: vA.a - vB.a, b: vA.b - vB.b }; }
-    function vecAdd(vA, vB) { return { L: vA.L + vB.L, a: vA.a + vB.a, b: vA.b + vB.b }; }
-    function vecScale(vA, scalar) { return { L: vA.L * scalar, a: vA.a * scalar, b: vA.b * scalar }; }
-    function vecMagSq(vA) { return vecDot(vA, vA); }
-
-    /**
-     * Finds the closest point M on the line segment P1-P2 to point O.
-     * Returns { pointM: {L,a,b}, weightP1: number } (weightP1 for P1)
-     */
-    function projectOntoSegment(pointO, segP1, segP2) {
-        const vecV = vecSub(segP2, segP1); // Vector P1 -> P2
-        const vecW = vecSub(pointO, segP1); // Vector P1 -> O
-        const dotVV = vecMagSq(vecV);
-
-        if (dotVV < 1e-9) { // P1 and P2 are essentially the same point
-            return { pointM: segP1, weightP1: 1.0 };
-        }
-
-        const dotWV = vecDot(vecW, vecV);
-        // t = projection factor onto infinite line P1P2 (0=P1, 1=P2)
-        const t = dotWV / dotVV;
-        const t_clamped = Math.max(0.0, Math.min(1.0, t)); // Clamp to segment [0, 1]
-
-        // Closest point M = P1 + t_clamped * V
-        const pointM = vecAdd(segP1, vecScale(vecV, t_clamped));
-        const weightP1 = 1.0 - t_clamped; // Weight for P1
-
-        return { pointM, weightP1 };
-    }
 
     /*****************************************************
      * 3) Nearest Color Finders
@@ -240,161 +209,7 @@
         return bestIdx;
     }
 
-    /**
-     * Finds the palette color most directionally opposite to P1 (closestC_idx), relative to O (targetO_lab).
-     * Returns the index of the opposite color, or -1 if none found/valid.
-     */
-    function findOppositeColor(targetO_lab, closestC_idx, paletteLabs) {
-        if (paletteLabs.length < 2) return -1;
 
-        const labC = paletteLabs[closestC_idx];
-        if (!labC) return -1;
-
-        const vecOC = vecSub(labC, targetO_lab);
-        const magSqOC = vecMagSq(vecOC);
-
-        // If target is extremely close to C, finding an "opposite" isn't meaningful
-        if (magSqOC < 1e-9) return -1;
-
-        let oppositeIdx = -1;
-        let minCosAngle = 1.0; // Cosine range is -1 to 1, min cosine = max angle (180 deg)
-        const magOC = Math.sqrt(magSqOC); // Calculate magnitude once
-
-        for (let k = 0; k < paletteLabs.length; k++) {
-            if (k === closestC_idx) continue; // Skip the closest color itself
-
-            const labK = paletteLabs[k];
-            if (!labK) continue; // Skip invalid palette entries
-
-            const vecOk = vecSub(labK, targetO_lab);
-            const magSqOk = vecMagSq(vecOk);
-
-            if (magSqOk < 1e-9) continue; // Skip if K is same as target
-
-            const magOk = Math.sqrt(magSqOk);
-            const denominator = magOC * magOk;
-            if (denominator < 1e-9) continue; // Avoid division by zero
-
-            const cosAngle = vecDot(vecOC, vecOk) / denominator;
-            const clampedCosAngle = Math.max(-1.0, Math.min(1.0, cosAngle)); // Clamp due to float issues
-
-            if (clampedCosAngle < minCosAngle) {
-                minCosAngle = clampedCosAngle;
-                oppositeIdx = k;
-            }
-        }
-        // Optional: Add an angle threshold check if needed
-        // if (minCosAngle > -0.5) return -1; // e.g., angle must be > 120 deg
-
-        // Make sure we actually found a different index
-        if (oppositeIdx === closestC_idx) return -1;
-
-        return oppositeIdx;
-    }
-
-    /*****************************************************
-     * 4) Dithering Strategy & Algorithms
-     *****************************************************/
-
-    /**
-     * Determines the dithering strategy based on "Nearest + Opposite (Checked)".
-     * Returns { type: 'solid'|'dither', idx1: number, idx2?: number, weight1?: number }
-     */
-    function findDitherStrategy_NearestOpposite(originalLab, paletteLabs, colorSpace) {
-         if (!paletteLabs || paletteLabs.length === 0) {
-             console.warn("Strategy: Empty palette received.");
-             return { type: 'solid', idx1: 0 }; // Handle empty
-         }
-
-         // 1. Find Closest (C)
-        const idxC = pickNearestInLargePalette(originalLab, paletteLabs);
-        const labC = paletteLabs[idxC];
-        if (!labC) { console.warn("Strategy: Closest color invalid."); return { type: 'solid', idx1: 0 }; }
-        const distC = deltaE76(originalLab, labC);
-
-        // 2. Handle perfect match or single color palette
-        if (distC < 0.001 || paletteLabs.length < 2) {
-            return { type: 'solid', idx1: idxC };
-        }
-
-        // 3. Find Most Opposite (I)
-        const idxI = findOppositeColor(originalLab, idxC, paletteLabs);
-
-        // 4. If no valid opposite found, use solid C
-        if (idxI === -1) { // findOppositeColor returns -1 if no valid opposite
-             return { type: 'solid', idx1: idxC };
-        }
-        const labI = paletteLabs[idxI];
-        if (!labI) { console.warn("Strategy: Opposite color invalid."); return { type: 'solid', idx1: idxC }; }
-
-        // 5. Perform Bracketing Check (Find closest point M on segment CI to O)
-        const { pointM, weightP1: weightC } = projectOntoSegment(originalLab, labC, labI);
-        const distM = deltaE76(originalLab, pointM);
-
-        // 6. Compare and Decide
-        if (distM < distC) {
-            // Dithering C and I is beneficial
-            return { type: 'dither', idx1: idxC, idx2: idxI, weight1: clamp(weightC, 0, 1) };
-        } else {
-            // Solid C is better or equal
-            return { type: 'solid', idx1: idxC };
-        }
-    }
-
-    /**
-     * Applies dither using the "Nearest + Opposite (Checked)" strategy.
-     */
-    function ditherNearestOppositeChecked(
-        imageData, palette, paletteLabs, colorSpace, blueNoiseTextureData
-    ) {
-        logWithTimestamp("ditherNearestOppositeChecked started");
-        const startTime = performance.now();
-        const { width, height, data } = imageData;
-        if (!blueNoiseTextureData) {
-            console.warn("Blue noise texture missing. Applying no dithering.");
-            return doNoDitherLargePalette(imageData, palette, paletteLabs, colorSpace);
-        }
-        const { width: bnWidth, height: bnHeight, data: bnData } = blueNoiseTextureData;
-        const output = new Uint8ClampedArray(data.length);
-
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const i4 = (y * width + x) * 4;
-                const r = data[i4], g = data[i4 + 1], b = data[i4 + 2], a = data[i4 + 3];
-                const originalLab = colorSpace.rgbToLab(r, g, b);
-
-                // Determine strategy for this pixel
-                const strategy = findDitherStrategy_NearestOpposite(originalLab, paletteLabs, colorSpace);
-
-                let chosenIdx;
-
-                if (strategy.type === 'solid') {
-                    chosenIdx = strategy.idx1;
-                } else { // type === 'dither'
-                    // Get blue noise value
-                    const bnX = x % bnWidth, bnY = y % bnHeight;
-                    const bnIndex = (bnY * bnWidth + bnX) * 4;
-                    const bnValue = bnData[bnIndex] / 255.0; // Use Red channel
-
-                    // Threshold using calculated weight for P1 (closest color C)
-                    chosenIdx = (bnValue < strategy.weight1) ? strategy.idx1 : strategy.idx2;
-                }
-
-                // Safety check for chosen index before accessing palette
-                if (chosenIdx < 0 || chosenIdx >= palette.length) {
-                    console.error(`Invalid chosen index ${chosenIdx} at ${x},${y}. Defaulting to 0.`);
-                    chosenIdx = 0;
-                }
-
-                // Get output color RGB
-                const { r: qr, g: qg, b: qb } = colorSpace.hexToRgb(palette[chosenIdx]);
-                output[i4] = qr; output[i4 + 1] = qg; output[i4 + 2] = qb; output[i4 + 3] = a;
-            }
-        }
-        const endTime = performance.now();
-        logWithTimestamp(`ditherNearestOppositeChecked finished in ${(endTime - startTime).toFixed(1)}ms`);
-        return new ImageData(output, width, height);
-    }
 
     /**
      * "No dithering": single nearest color in palette.
@@ -444,7 +259,6 @@
     let originalImageData = null;
     let previewImageData = null;
     let currentImageData = null;
-    let blueNoiseTextureData = null;
     let isProcessing = false;
     let isEyedropperActive = false;
     let customPaletteArray = ['#000000', '#FFFFFF'];
@@ -467,7 +281,6 @@
             saturationSlider: document.getElementById("saturation-slider"),
             saturationValueSpan: document.getElementById("saturation-value"),
             resetAdjustmentsButton: document.getElementById("reset-adjustments-button"),
-            ditheringEnabledCheckbox: document.getElementById("dithering-enable"),
             processButton: document.getElementById("process-button"),
             undoButton: document.getElementById("undo-button"),
             downloadButton: document.getElementById("download-button"),
@@ -605,24 +418,12 @@
             previewImageData = originalImageData; currentImageData = originalImageData;
             if(uiElements.resetAdjustmentsButton) uiElements.resetAdjustmentsButton.click(); else updatePreview(); // Reset sliders & update preview
             showStatus("Image loaded. Adjustments reset.");
-            if(uiElements.undoButton) uiElements.undoButton.disabled = false; if(uiElements.downloadButton) uiElements.downloadButton.disabled = false; if(uiElements.processButton) uiElements.processButton.disabled = blueNoiseTextureData === null;
+            if(uiElements.undoButton) uiElements.undoButton.disabled = false; if(uiElements.downloadButton) uiElements.downloadButton.disabled = false; if(uiElements.processButton) uiElements.processButton.disabled = false;
         } catch (error) { console.error("Error within loadImage try block:", error); showStatus(`Error loading image: ${error.message}`); originalImageData=null; previewImageData=null; currentImageData=null; if(uiElements.processButton)uiElements.processButton.disabled=true; if(uiElements.undoButton)uiElements.undoButton.disabled=true; if(uiElements.downloadButton)uiElements.downloadButton.disabled=true; }
         finally { if (url && url.startsWith('blob:')) { logWithTimestamp("Revoking object URL:", url); URL.revokeObjectURL(url); } }
         logWithTimestamp("loadImage finished");
     }
 
-    function loadBlueNoise() {
-        logWithTimestamp("loadBlueNoise started");
-        // *** REPLACE WITH YOUR ACTUAL URL or LOCAL PATH ***
-        const blueNoiseURL = "https://assets.codepen.io/3457130/HDR_L_0.png"; // Example URL
-        // const blueNoiseURL = "blue-noise-128.png"; // Example local path
-
-        const img = new Image(); if (!blueNoiseURL.startsWith("data:") && !blueNoiseURL.startsWith(window.location.origin) && !/^[./]/.test(blueNoiseURL)) img.crossOrigin = "Anonymous";
-        const processTexture = () => { try { logWithTimestamp("Processing blue noise texture..."); const tempCanvas=document.createElement('canvas'); const tempCtx=tempCanvas.getContext('2d'); tempCanvas.width=img.naturalWidth; tempCanvas.height=img.naturalHeight; if(tempCanvas.width===0||tempCanvas.height===0)throw new Error(`Texture loaded with zero dimensions.`); tempCtx.drawImage(img,0,0); blueNoiseTextureData=tempCtx.getImageData(0,0,tempCanvas.width,tempCanvas.height); logWithTimestamp(`Blue noise texture (${tempCanvas.width}x${tempCanvas.height}) processed successfully.`); if(uiElements.processButton)uiElements.processButton.disabled=originalImageData===null;} catch(error){ console.error("Error processing blue noise texture:", error); let dE=error.message; if(error.name==='SecurityError')dE+=' CORS issue?'; showStatus(`Error processing BN texture: ${dE}`); alert(`Error processing BN texture: ${dE}`); if(uiElements.processButton)uiElements.processButton.disabled = true;} };
-        img.onload = processTexture; img.onerror = (err) => { console.error(`Error loading blue noise texture from ${blueNoiseURL}:`, err); const msg=`Error loading BN texture. Check URL/path & network.`; showStatus(msg); alert(msg); if(uiElements.processButton)uiElements.processButton.disabled = true;};
-        img.src = blueNoiseURL;
-        logWithTimestamp("loadBlueNoise: Image source set, loading initiated.");
-    }
 
     // --- Event Listeners Setup ---
     logWithTimestamp("Setting up event listeners...");
@@ -672,9 +473,9 @@
         if (uiElements.resetAdjustmentsButton) uiElements.resetAdjustmentsButton.addEventListener('click', () => { logWithTimestamp("resetAdjustmentsButton 'click' event"); uiElements.gammaSlider.value=1.0; uiElements.contrastSlider.value=100; uiElements.saturationSlider.value=100; if(uiElements.gammaValueSpan)uiElements.gammaValueSpan.textContent='1.0'; if(uiElements.contrastValueSpan)uiElements.contrastValueSpan.textContent='100%'; if(uiElements.saturationValueSpan)uiElements.saturationValueSpan.textContent='100%'; updatePreview(); showStatus("Adjustments reset."); });
 
         if (uiElements.processButton) uiElements.processButton.addEventListener("click", () => {
-            logWithTimestamp("processButton 'click' event"); const iDTP = previewImageData || originalImageData; if (!iDTP) { showStatus("Please load an image first."); return; } const iDE = uiElements.ditheringEnabledCheckbox.checked; if (iDE && !blueNoiseTextureData) { showStatus("Blue noise texture not loaded. Cannot dither."); return; } if (isProcessing) { showStatus("Already processing..."); return; }
+            logWithTimestamp("processButton 'click' event"); const iDTP = previewImageData || originalImageData; if (!iDTP) { showStatus("Please load an image first."); return; } if (isProcessing) { showStatus("Already processing..."); return; }
             isProcessing=true; showStatus("Processing image..."); uiElements.processButton.disabled=true; uiElements.undoButton.disabled=true; uiElements.downloadButton.disabled=true; if(uiElements.canvas.parentElement) uiElements.canvas.parentElement.classList.add("processing");
-            setTimeout(() => { try { const palette = getUserPalette(); if (palette.length === 0) throw new Error("Palette is empty."); const pL = palette.map(h => { const rgb=colorSpace.hexToRgb(h); return colorSpace.rgbToLab(rgb.r,rgb.g,rgb.b); }); let oID; const sT=performance.now(); if (iDE) { oID = ditherNearestOppositeChecked(iDTP, palette, pL, colorSpace, blueNoiseTextureData); } else { oID = doNoDitherLargePalette(iDTP, palette, pL, colorSpace); } const eT=performance.now(); showStatus(`Processing finished in ${((eT-sT)/1000).toFixed(2)}s.`); uiElements.ctx.putImageData(oID,0,0); currentImageData=oID; } catch (error) { console.error("Error during processing:",error); showStatus(`Error: ${error.message}. Reverting preview.`); alert(`Processing Error: ${error.message}`); const iTR=previewImageData||originalImageData; if(iTR&&uiElements.ctx)uiElements.ctx.putImageData(iTR,0,0); currentImageData=iTR; } finally { isProcessing=false; if(uiElements.processButton) uiElements.processButton.disabled=blueNoiseTextureData===null||originalImageData===null; if(uiElements.undoButton) uiElements.undoButton.disabled=originalImageData===null; if(uiElements.downloadButton) uiElements.downloadButton.disabled=currentImageData===null; if(uiElements.canvas.parentElement) uiElements.canvas.parentElement.classList.remove("processing"); logWithTimestamp("Processing finished (in finally block)"); } }, 50);
+            setTimeout(() => { try { const palette = getUserPalette(); if (palette.length === 0) throw new Error("Palette is empty."); const pL = palette.map(h => { const rgb=colorSpace.hexToRgb(h); return colorSpace.rgbToLab(rgb.r,rgb.g,rgb.b); }); const sT=performance.now(); const oID = doNoDitherLargePalette(iDTP, palette, pL, colorSpace); const eT=performance.now(); showStatus(`Processing finished in ${((eT-sT)/1000).toFixed(2)}s.`); uiElements.ctx.putImageData(oID,0,0); currentImageData=oID; } catch (error) { console.error("Error during processing:",error); showStatus(`Error: ${error.message}. Reverting preview.`); alert(`Processing Error: ${error.message}`); const iTR=previewImageData||originalImageData; if(iTR&&uiElements.ctx)uiElements.ctx.putImageData(iTR,0,0); currentImageData=iTR; } finally { isProcessing=false; if(uiElements.processButton) uiElements.processButton.disabled=originalImageData===null; if(uiElements.undoButton) uiElements.undoButton.disabled=originalImageData===null; if(uiElements.downloadButton) uiElements.downloadButton.disabled=currentImageData===null; if(uiElements.canvas.parentElement) uiElements.canvas.parentElement.classList.remove("processing"); logWithTimestamp("Processing finished (in finally block)"); } }, 50);
         });
 
         if (uiElements.undoButton) uiElements.undoButton.addEventListener("click", () => {
@@ -682,7 +483,7 @@
         });
 
         if (uiElements.downloadButton) uiElements.downloadButton.addEventListener("click", () => {
-            logWithTimestamp("downloadButton 'click' event"); if (!currentImageData) { showStatus("No processed image to download."); return; } const dM=uiElements.ditheringEnabledCheckbox.checked?"dither_on":"dither_off"; const pC=uiElements.paletteSelect.value; const fN=`${originalFileName}_quant_${pC}_${dM}.png`; const tC=document.createElement("canvas"); tC.width=currentImageData.width; tC.height=currentImageData.height; const tCtx=tC.getContext("2d"); tCtx.putImageData(currentImageData,0,0); try { const link=document.createElement("a"); link.download=fN; link.href=tC.toDataURL("image/png"); link.click(); showStatus(`Download started: ${fN}`); } catch (error) { console.error("Error generating download link:",error); showStatus(`Error generating download: ${error.message}`); alert(`Error generating download: ${error.message}`); }
+            logWithTimestamp("downloadButton 'click' event"); if (!currentImageData) { showStatus("No processed image to download."); return; } const pC=uiElements.paletteSelect.value; const fN=`${originalFileName}_quant_${pC}.png`; const tC=document.createElement("canvas"); tC.width=currentImageData.width; tC.height=currentImageData.height; const tCtx=tC.getContext("2d"); tCtx.putImageData(currentImageData,0,0); try { const link=document.createElement("a"); link.download=fN; link.href=tC.toDataURL("image/png"); link.click(); showStatus(`Download started: ${fN}`); } catch (error) { console.error("Error generating download link:",error); showStatus(`Error generating download: ${error.message}`); alert(`Error generating download: ${error.message}`); }
         });
 
         logWithTimestamp("Event listeners setup finished.");
@@ -703,7 +504,6 @@
         logWithTimestamp("initializeApp: Checking paletteSelect before dispatch:", uiElements.paletteSelect); // DEBUG
         if (uiElements.paletteSelect) { logWithTimestamp("initializeApp: Dispatching 'change' event..."); uiElements.paletteSelect.dispatchEvent(new Event('change')); logWithTimestamp("initializeApp: 'change' event dispatched."); } // DEBUG
         else { console.error("initializeApp: Cannot dispatch event, paletteSelect is null."); } // DEBUG
-        loadBlueNoise(); // Start loading texture
         logWithTimestamp("initializeApp finished");
     }
 
