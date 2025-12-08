@@ -3,58 +3,783 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>4-Colour FDM Workflow</title>
+<title>HueForge-Lite Studio</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-image2print-modular-01UCd6FvZsXqJ71x6cydW1Bf/app-styles.css">
+<style>
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    font-family: 'Space Mono', monospace;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #1f2937;
+    font-size: 14px;
+    padding: 20px;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+h1 {
+    font-size: 28px;
+    margin: 0 0 10px 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.subtitle {
+    font-size: 12px;
+    color: #6b7280;
+    margin-bottom: 24px;
+}
+
+h2 {
+    font-size: 18px;
+    margin: 24px 0 16px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #667eea;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 8px;
+}
+
+h3 {
+    font-size: 14px;
+    margin: 12px 0 8px 0;
+    font-weight: 700;
+    color: #6b7280;
+}
+
+.section {
+    background: white;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+.box {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+input[type="text"], input[type="number"], input[type="file"], select {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #d1d5db;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+    transition: border-color 0.2s;
+}
+
+input[type="text"]:focus, input[type="number"]:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+input[type="checkbox"], input[type="radio"] {
+    margin-right: 6px;
+    accent-color: #667eea;
+}
+
+button {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 13px;
+    margin-right: 8px;
+    margin-top: 8px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+button.secondary {
+    background: white;
+    color: #667eea;
+    border: 2px solid #667eea;
+}
+
+button.secondary:hover {
+    background: #f3f4f6;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(45px, 1fr));
+    gap: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+    padding: 8px;
+    background: white;
+    border-radius: 6px;
+}
+
+.swatch {
+    aspect-ratio: 1;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 3px solid transparent;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.swatch:hover {
+    transform: scale(1.1);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.swatch.selected {
+    border-color: #667eea;
+    transform: scale(0.95);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+}
+
+.swatch.selected::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 20px;
+    font-weight: bold;
+    text-shadow: 0 0 4px rgba(0,0,0,0.5);
+}
+
+.canvas-wrap {
+    position: relative;
+    background: #f3f4f6;
+    border: 2px solid #d1d5db;
+    border-radius: 8px;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+    padding: 20px;
+}
+
+canvas {
+    max-width: 100%;
+    max-height: 500px;
+    image-rendering: pixelated;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.msg {
+    padding: 14px 16px;
+    border-radius: 8px;
+    margin-top: 12px;
+    font-size: 13px;
+    border: 2px solid;
+}
+
+.msg.ok {
+    background: #d1fae5;
+    color: #065f46;
+    border-color: #10b981;
+}
+
+.msg.err {
+    background: #fee2e2;
+    color: #991b1b;
+    border-color: #ef4444;
+}
+
+.msg.info {
+    background: #dbeafe;
+    color: #1e40af;
+    border-color: #3b82f6;
+}
+
+.hidden { display: none !important; }
+
+.stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+    padding: 16px;
+    background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+    border-radius: 8px;
+}
+
+.stat {
+    text-align: center;
+    padding: 12px;
+    background: white;
+    border-radius: 6px;
+}
+
+.stat-val {
+    font-size: 24px;
+    font-weight: 700;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.stat-lbl {
+    font-size: 11px;
+    color: #6b7280;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 10px;
+    background: #667eea;
+    color: white;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+    margin-left: 8px;
+}
+
+.step-indicator {
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: 700;
+    text-align: center;
+    line-height: 32px;
+    margin-right: 12px;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: #667eea; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #764ba2; }
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.loading {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+</style>
 </head>
 <body>
+<div class="container">
+<h1>🎨 HueForge-Lite Studio</h1>
+<div class="subtitle">Multi-Color FDM Printing Workflow • Modular Edition</div>
 
-<!-- Loading indicator -->
-<div id="loading" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); color: white; display: flex; align-items: center; justify-content: center; z-index: 9999; font-family: monospace;">
-  <div style="text-align: center;">
-    <div style="font-size: 24px; margin-bottom: 12px;">🎨 Loading...</div>
-    <div style="font-size: 14px;">4-Colour FDM Workflow</div>
-  </div>
+<!-- STEP 1 -->
+<div class="section">
+<h2><span class="step-indicator">1</span>Generate Calibration Grid</h2>
+
+<div class="box">
+<h3>Select Filament Colors (2-10)<span class="badge" id="selCount">0 Selected</span></h3>
+<input type="text" id="searchColors" placeholder="🔍 Search colors..." style="margin-bottom:8px">
+<div id="colorGrid" class="color-grid"></div>
 </div>
 
-<!-- App container (will be populated by loaded HTML) -->
-<div id="app"></div>
+<div class="grid-2">
+<div class="box">
+<h3>📐 Dimensions</h3>
+<div class="grid-2">
+<label>Bed Width (mm)<input type="number" id="bedW" value="256"></label>
+<label>Bed Height (mm)<input type="number" id="bedH" value="256"></label>
+</div>
+<div class="grid-2">
+<label>Scan Width (mm)<input type="number" id="scanW" value="210"></label>
+<label>Scan Height (mm)<input type="number" id="scanH" value="297"></label>
+</div>
+<div class="grid-2">
+<label>Tile Size (mm)<input type="number" id="tileSize" value="10" step="0.5"></label>
+<label>Gap (mm)<input type="number" id="gap" value="1" step="0.5"></label>
+</div>
+</div>
 
-<!-- Load HTML structure from GitHub -->
-<script>
-fetch('https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-image2print-modular-01UCd6FvZsXqJ71x6cydW1Bf/app.html')
-  .then(r => r.text())
-  .then(html => {
-    // Extract body content
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    const bodyContent = doc.body.innerHTML;
+<div class="box">
+<h3>📏 Layer Configuration</h3>
+<div class="grid-3">
+<label>Layers/Tile<input type="number" id="layers" value="4" min="1" max="10"></label>
+<label>Layer Height (mm)<input type="number" id="layerH" value="0.08" step="0.01"></label>
+<label>Base Layers<input type="number" id="baseLayers" value="3" min="0"></label>
+</div>
+</div>
+</div>
 
-    // Inject into app container
-    document.getElementById('app').innerHTML = bodyContent;
+<button onclick="generateGrid()">🎯 Generate Grid</button>
+<button class="secondary" onclick="exportGridJSON()">💾 Export JSON</button>
+<button class="secondary" onclick="exportGridSTLs()">📦 Export STLs</button>
 
-    // Hide loading indicator
-    document.getElementById('loading').style.display = 'none';
+<div id="gridBox" class="box hidden">
+<h3>✨ Grid Preview</h3>
+<div class="canvas-wrap">
+<canvas id="gridCanvas"></canvas>
+</div>
+<div class="stats">
+<div class="stat"><div class="stat-val" id="totSeqs">0</div><div class="stat-lbl">Sequences</div></div>
+<div class="stat"><div class="stat-val" id="gridRows">0</div><div class="stat-lbl">Rows</div></div>
+<div class="stat"><div class="stat-val" id="gridCols">0</div><div class="stat-lbl">Columns</div></div>
+<div class="stat"><div class="stat-val" id="gridSize">0×0mm</div><div class="stat-lbl">Grid Size</div></div>
+</div>
+</div>
 
-    console.log('✅ HTML loaded from GitHub');
-  })
-  .catch(err => {
-    document.getElementById('loading').innerHTML = `
-      <div style="text-align: center; color: #ff6b6b;">
-        <div style="font-size: 24px; margin-bottom: 12px;">❌ Error</div>
-        <div style="font-size: 14px;">Failed to load app from GitHub</div>
-        <div style="font-size: 12px; margin-top: 8px; opacity: 0.7;">${err.message}</div>
-      </div>
-    `;
-  });
+<div id="msg1" class="msg hidden"></div>
+</div>
+
+<!-- STEP 2 -->
+<div class="section">
+<h2><span class="step-indicator">2</span>Scan Analysis</h2>
+
+<div class="box">
+<h3>📸 Upload Scan Image</h3>
+<input type="file" id="scanFile" accept="image/*">
+<p style="font-size:12px; color:#6b7280; margin:8px 0 0 0;">Upload a scan of your printed calibration grid</p>
+</div>
+
+<button id="analyzeBtn" onclick="analyzeScan()" disabled>🔬 Extract Colors</button>
+<button class="secondary" onclick="exportPalette()">🎨 Export Palette (GPL)</button>
+
+<div id="scanBox" class="box hidden">
+<h3>🎨 Extracted Palette<span class="badge" id="paletteCount">0 Colors</span></h3>
+<div id="palettePreview" class="color-grid" style="max-height:150px"></div>
+</div>
+
+<div id="msg2" class="msg hidden"></div>
+</div>
+
+<!-- STEP 3 -->
+<div class="section">
+<h2><span class="step-indicator">3</span>Image Quantization & Export</h2>
+
+<div class="box">
+<h3>🖼️ Upload Artwork Image</h3>
+<input type="file" id="imageFile" accept="image/*">
+<p style="font-size:12px; color:#6b7280; margin:8px 0 0 0;">Upload the artwork you want to convert to multi-color print</p>
+</div>
+
+<div class="grid-2">
+<div class="box">
+<h3>⚙️ Quantization Options</h3>
+<div class="grid-2">
+<label>Print Width (mm)<input type="number" id="printW" value="170" min="10"></label>
+<label>Max Colors<input type="number" id="maxColors" value="4" min="2"></label>
+</div>
+<label><input type="checkbox" id="dither" checked> Floyd-Steinberg Dithering</label>
+<label><input type="checkbox" id="applyMinDetail"> Apply Min-Detail Filter (1.0mm)</label>
+</div>
+</div>
+
+<button id="quantBtn" onclick="quantizeImage()" disabled>🎨 Quantize Image</button>
+<button class="secondary" id="exportSTLBtn" onclick="exportArtworkSTLs()" disabled>📦 Export Artwork STLs</button>
+
+<div id="quantBox" class="box hidden">
+<h3>✨ Quantized Result</h3>
+<div class="canvas-wrap">
+<canvas id="quantCanvas"></canvas>
+</div>
+<div class="stats">
+<div class="stat"><div class="stat-val" id="quantW">0</div><div class="stat-lbl">Width (px)</div></div>
+<div class="stat"><div class="stat-val" id="quantH">0</div><div class="stat-lbl">Height (px)</div></div>
+<div class="stat"><div class="stat-val" id="quantColors">0</div><div class="stat-lbl">Colors Used</div></div>
+</div>
+</div>
+
+<div id="msg3" class="msg hidden"></div>
+</div>
+
+<div style="text-align:center; margin-top:30px; padding-top:20px; border-top:2px solid #e5e7eb; color:#6b7280; font-size:12px;">
+Built with ❤️ using <strong>HueForge-Lite Modular Library</strong> •
+<a href="https://github.com/Cyrusublerman/Experiments" target="_blank" style="color:#667eea; text-decoration:none;">View on GitHub</a>
+</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+<script type="importmap">
+{
+  "imports": {
+    "./lib/index.js": "https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-imageto3dprint-gem-016seizQpjkXy6rGkj1SE1Pt/lib/index.js",
+    "./lib/core/constants.js": "https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-imageto3dprint-gem-016seizQpjkXy6rGkj1SE1Pt/lib/core/constants.js",
+    "./lib/core/utils.js": "https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-imageto3dprint-gem-016seizQpjkXy6rGkj1SE1Pt/lib/core/utils.js",
+    "./lib/core/state.js": "https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-imageto3dprint-gem-016seizQpjkXy6rGkj1SE1Pt/lib/core/state.js",
+    "./lib/grid/index.js": "https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-imageto3dprint-gem-016seizQpjkXy6rGkj1SE1Pt/lib/grid/index.js",
+    "./lib/grid/sequences.js": "https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-imageto3dprint-gem-016seizQpjkXy6rGkj1SE1Pt/lib/grid/sequences.js",
+    "./lib/grid/layout.js": "https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-imageto3dprint-gem-016seizQpjkXy6rGkj1SE1Pt/lib/grid/layout.js",
+    "./lib/grid/visualization.js": "https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-imageto3dprint-gem-016seizQpjkXy6rGkj1SE1Pt/lib/grid/visualization.js",
+    "./lib/grid/export.js": "https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-imageto3dprint-gem-016seizQpjkXy6rGkj1SE1Pt/lib/grid/export.js",
+    "./lib/scan/index.js": "https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-imageto3dprint-gem-016seizQpjkXy6rGkj1SE1Pt/lib/scan/index.js",
+    "./lib/quantize/index.js": "https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-imageto3dprint-gem-016seizQpjkXy6rGkj1SE1Pt/lib/quantize/index.js",
+    "./lib/stl/index.js": "https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-imageto3dprint-gem-016seizQpjkXy6rGkj1SE1Pt/lib/stl/index.js"
+  }
+}
 </script>
 
-<!-- External dependencies -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
+<script type="module">
+import * as HFL from './lib/index.js';
 
-<!-- Main app JS from GitHub -->
-<script type="module" src="https://cdn.jsdelivr.net/gh/Cyrusublerman/Experiments@claude/refactor-image2print-modular-01UCd6FvZsXqJ71x6cydW1Bf/app.js"></script>
+window.app = {
+    selectedColors: [],
+    gridData: null,
+    sequenceMap: null,
+    palette: null,
+    quantizedImage: null,
+    layerMaps: null
+};
 
+function initColorPicker() {
+    const grid = document.getElementById('colorGrid');
+    const search = document.getElementById('searchColors');
+
+    function renderColors(filter = '') {
+        grid.innerHTML = '';
+        const filtered = filter ?
+            HFL.COLOURS.filter(c => c.n.toLowerCase().includes(filter.toLowerCase())) :
+            HFL.COLOURS;
+
+        filtered.forEach(color => {
+            const swatch = document.createElement('div');
+            swatch.className = 'swatch';
+            swatch.style.background = color.h;
+            swatch.title = color.n;
+            swatch.onclick = () => toggleColor(color);
+            grid.appendChild(swatch);
+        });
+        updateSelection();
+    }
+
+    search.oninput = (e) => renderColors(e.target.value);
+    renderColors();
+}
+
+function toggleColor(color) {
+    const idx = window.app.selectedColors.findIndex(c => c.h === color.h);
+    if (idx >= 0) {
+        window.app.selectedColors.splice(idx, 1);
+    } else if (window.app.selectedColors.length < 10) {
+        window.app.selectedColors.push(color);
+    }
+    updateSelection();
+}
+
+function updateSelection() {
+    const count = window.app.selectedColors.length;
+    document.getElementById('selCount').textContent = `${count} Selected`;
+    document.querySelectorAll('.swatch').forEach(el => {
+        const bg = el.style.background;
+        const isSelected = window.app.selectedColors.some(c => c.h === bg || bg.includes(c.h));
+        el.classList.toggle('selected', isSelected);
+    });
+}
+
+window.generateGrid = async function() {
+    if (window.app.selectedColors.length < 2) {
+        showMsg(1, '⚠️ Please select at least 2 colors', 'err');
+        return;
+    }
+
+    showMsg(1, '⏳ Generating grid...', 'info');
+
+    try {
+        const config = {
+            bedW: +document.getElementById('bedW').value,
+            bedH: +document.getElementById('bedH').value,
+            scanW: +document.getElementById('scanW').value,
+            scanH: +document.getElementById('scanH').value,
+            tileSize: +document.getElementById('tileSize').value,
+            gap: +document.getElementById('gap').value,
+            layers: +document.getElementById('layers').value,
+            layerHeight: +document.getElementById('layerH').value,
+            baseLayers: +document.getElementById('baseLayers').value
+        };
+
+        const sequences = HFL.generateSequences(window.app.selectedColors.length, config.layers);
+        const constraints = HFL.calculateConstraints({
+            bedW: config.bedW, bedH: config.bedH,
+            scanW: config.scanW, scanH: config.scanH
+        });
+
+        const layout = HFL.calculateGridLayout({
+            sequenceCount: sequences.length,
+            tileSize: config.tileSize,
+            gap: config.gap,
+            maxWidth: constraints.maxWidth,
+            maxHeight: constraints.maxHeight
+        });
+
+        if (!layout.fits) {
+            showMsg(1, '❌ ' + layout.error, 'err');
+            return;
+        }
+
+        window.app.gridData = {
+            sequences, colours: window.app.selectedColors,
+            rows: layout.rows, cols: layout.cols,
+            tileSize: config.tileSize, gap: config.gap,
+            width: layout.width, height: layout.height,
+            emptyCells: layout.emptyCells
+        };
+
+        window.app.sequenceMap = HFL.buildSequenceMap(sequences, window.app.selectedColors, layout.cols);
+
+        const canvas = document.getElementById('gridCanvas');
+        HFL.drawGrid(canvas, window.app.gridData, { scale: 1 });
+
+        document.getElementById('gridBox').classList.remove('hidden');
+        document.getElementById('totSeqs').textContent = sequences.length;
+        document.getElementById('gridRows').textContent = layout.rows;
+        document.getElementById('gridCols').textContent = layout.cols;
+        document.getElementById('gridSize').textContent = `${layout.width.toFixed(1)}×${layout.height.toFixed(1)}mm`;
+
+        showMsg(1, `✅ Generated ${sequences.length} sequences in ${layout.rows}×${layout.cols} grid`, 'ok');
+    } catch (e) {
+        showMsg(1, `❌ Error: ${e.message}`, 'err');
+    }
+};
+
+window.exportGridJSON = function() {
+    if (!window.app.gridData) return;
+    const json = HFL.exportGridJSON(window.app.gridData, {
+        layers: +document.getElementById('layers').value,
+        layerHeight: +document.getElementById('layerH').value,
+        baseLayers: +document.getElementById('baseLayers').value
+    });
+    saveAs(new Blob([json], {type: 'application/json'}), 'calibration_grid.json');
+    showMsg(1, '✅ Exported grid.json', 'ok');
+};
+
+window.exportGridSTLs = function() {
+    if (!window.app.gridData) return;
+    showMsg(1, '⏳ Generating STLs...', 'info');
+
+    setTimeout(() => {
+        const stls = HFL.exportGridSTLs(window.app.gridData, {
+            layerHeight: +document.getElementById('layerH').value,
+            baseLayers: +document.getElementById('baseLayers').value,
+            baseColorIndex: -1
+        });
+
+        Object.entries(stls).forEach(([filename, content]) => {
+            saveAs(new Blob([content], {type: 'text/plain'}), filename);
+        });
+
+        showMsg(1, `✅ Exported ${Object.keys(stls).length} STL files`, 'ok');
+    }, 100);
+};
+
+document.getElementById('scanFile').onchange = function(e) {
+    if (!window.app.gridData) {
+        showMsg(2, '⚠️ Generate grid first', 'err');
+        return;
+    }
+
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const img = new Image();
+    img.onload = () => {
+        window.app.scanImage = img;
+        document.getElementById('analyzeBtn').disabled = false;
+        showMsg(2, '✅ Scan loaded', 'ok');
+    };
+    img.src = URL.createObjectURL(file);
+};
+
+window.analyzeScan = function() {
+    if (!window.app.scanImage || !window.app.gridData) return;
+
+    showMsg(2, '⏳ Extracting colors...', 'info');
+
+    setTimeout(() => {
+        const canvas = document.createElement('canvas');
+        canvas.width = window.app.scanImage.width;
+        canvas.height = window.app.scanImage.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(window.app.scanImage, 0, 0);
+
+        const alignment = HFL.autoCalculateScale(
+            canvas.width, canvas.height,
+            window.app.gridData.width, window.app.gridData.height
+        );
+        alignment.offsetX = 100;
+        alignment.offsetY = 100;
+
+        const { palette } = HFL.extractColors(canvas, window.app.gridData, alignment);
+        window.app.palette = palette;
+
+        const preview = document.getElementById('palettePreview');
+        preview.innerHTML = '';
+        palette.forEach(c => {
+            const swatch = document.createElement('div');
+            swatch.className = 'swatch';
+            swatch.style.background = `rgb(${c.r},${c.g},${c.b})`;
+            swatch.title = `rgb(${c.r}, ${c.g}, ${c.b})`;
+            preview.appendChild(swatch);
+        });
+
+        document.getElementById('paletteCount').textContent = `${palette.length} Colors`;
+        document.getElementById('scanBox').classList.remove('hidden');
+        showMsg(2, `✅ Extracted ${palette.length} unique colors`, 'ok');
+
+        if (window.app.imageLoaded) {
+            document.getElementById('quantBtn').disabled = false;
+        }
+    }, 100);
+};
+
+window.exportPalette = function() {
+    if (!window.app.palette) return;
+    const gpl = HFL.generateGPL(window.app.palette, 'ExtractedPalette');
+    saveAs(new Blob([gpl], {type: 'text/plain'}), 'palette.gpl');
+    showMsg(2, '✅ Exported palette.gpl', 'ok');
+};
+
+document.getElementById('imageFile').onchange = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const img = new Image();
+    img.onload = () => {
+        window.app.artworkImage = img;
+        window.app.imageLoaded = true;
+        if (window.app.palette) {
+            document.getElementById('quantBtn').disabled = false;
+        }
+        showMsg(3, '✅ Image loaded', 'ok');
+    };
+    img.src = URL.createObjectURL(file);
+};
+
+window.quantizeImage = function() {
+    if (!window.app.artworkImage || !window.app.palette || !window.app.sequenceMap) return;
+
+    showMsg(3, '⏳ Quantizing image...', 'info');
+
+    setTimeout(() => {
+        try {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = window.app.artworkImage.width;
+            tempCanvas.height = window.app.artworkImage.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(window.app.artworkImage, 0, 0);
+
+            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+
+            const maxColors = +document.getElementById('maxColors').value;
+            const palette = window.app.palette.slice(0, maxColors);
+            const dither = document.getElementById('dither').checked;
+            const applyMin = document.getElementById('applyMinDetail').checked;
+
+            const mask = applyMin ?
+                HFL.applyMinDetailFilter(imageData, palette, 1.0, +document.getElementById('printW').value) :
+                null;
+
+            HFL.quantizeImage(imageData, palette, { dither, mask });
+
+            const canvas = document.getElementById('quantCanvas');
+            canvas.width = imageData.width;
+            canvas.height = imageData.height;
+            const ctx = canvas.getContext('2d');
+            ctx.putImageData(imageData, 0, 0);
+
+            window.app.quantizedImage = imageData;
+
+            window.app.layerMaps = HFL.expandToLayers(
+                imageData,
+                window.app.sequenceMap,
+                window.app.selectedColors.length
+            );
+
+            document.getElementById('quantBox').classList.remove('hidden');
+            document.getElementById('quantW').textContent = imageData.width;
+            document.getElementById('quantH').textContent = imageData.height;
+            document.getElementById('quantColors').textContent = palette.length;
+            document.getElementById('exportSTLBtn').disabled = false;
+
+            showMsg(3, '✅ Quantization complete!', 'ok');
+        } catch (e) {
+            showMsg(3, `❌ Error: ${e.message}`, 'err');
+        }
+    }, 100);
+};
+
+window.exportArtworkSTLs = function() {
+    if (!window.app.layerMaps || !window.app.quantizedImage) return;
+
+    showMsg(3, '⏳ Generating artwork STLs...', 'info');
+
+    setTimeout(() => {
+        try {
+            const filamentNames = window.app.selectedColors.map(c => c.n);
+            const stls = HFL.exportArtworkSTLs(window.app.layerMaps, filamentNames, {
+                imageWidth: window.app.quantizedImage.width,
+                imageHeight: window.app.quantizedImage.height,
+                printWidth: +document.getElementById('printW').value,
+                layerHeight: +document.getElementById('layerH').value
+            });
+
+            Object.entries(stls).forEach(([filename, content]) => {
+                saveAs(new Blob([content], {type: 'text/plain'}), filename);
+            });
+
+            showMsg(3, `✅ Exported ${Object.keys(stls).length} artwork STL files!`, 'ok');
+        } catch (e) {
+            showMsg(3, `❌ Error: ${e.message}`, 'err');
+        }
+    }, 100);
+};
+
+function showMsg(step, text, type) {
+    const msg = document.getElementById(`msg${step}`);
+    msg.textContent = text;
+    msg.className = `msg ${type}`;
+    msg.classList.remove('hidden');
+}
+
+initColorPicker();
+showMsg(1, '👋 Welcome! Select 2-10 colors to get started.', 'info');
+</script>
 </body>
 </html>
