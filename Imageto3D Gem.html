@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HueForge-Lite Studio (Final)</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/noisejs@2.1.0/index.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <style>
+        :root {
+            --bg-app: #f3f4f6; --bg-panel: #ffffff; --border: #e5e7eb;
+            --primary: #2563eb; --primary-hover: #1d4ed8;
+            --text-main: #1f2937; --text-muted: #6b7280;
+            --danger: #ef4444; --warning: #f59e0b;
+            --sidebar-w: 380px;
+        }
+
+        /* --- GLOBAL LAYOUT --- */
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Space Mono', monospace; background: var(--bg-app); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-size: 12px; }
+
+        header { background: var(--bg-panel); border-bottom: 1px solid var(--border); height: 48px; display: flex; flex-shrink: 0; }
+        .tab { flex: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; border-bottom: 3px solid transparent; font-weight: 700; color: var(--text-muted); transition: all 0.2s; max-width: 150px; }
+        .tab:hover { background: #f9fafb; color: var(--text-main); }
+        .tab.active { border-bottom-color: var(--primary); color: var(--primary); background: #eff6ff; }
+
+        .workspace { display: flex; flex: 1; overflow: hidden; }
+        .sidebar { width: var(--sidebar-w); background: var(--bg-panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; padding: 20px; flex-shrink: 0; }
+        
+        .sidebar-section { margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 20px; }
+        .sidebar-section:last-child { border: none; padding-bottom: 0; }
+        h3 { font-size: 0.9em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 12px 0; letter-spacing: 0.05em; font-weight: 700; }
+
+        .pane-right { flex: 1; background: #e5e7eb; position: relative; display: flex; flex-direction: column; overflow: hidden; }
+        .canvas-area { flex: 1; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 20px 20px; }
+        .canvas-wrapper { box-shadow: 0 10px 30px rgba(0,0,0,0.1); background: white; transition: transform 0.1s linear; transform-origin: center; display:flex; align-items:center; justify-content:center;}
+
+        /* --- CONTROLS --- */
+        .form-group { margin-bottom: 12px; }
+        label { display: block; margin-bottom: 4px; font-weight: 700; font-size: 0.85em; }
+        input[type="text"], input[type="number"], select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-family: inherit; font-size: 1em; background:#fff; }
+        input[type="range"] { width: 100%; }
+        
+        .btn { display: flex; align-items: center; justify-content: center; padding: 10px; border-radius: 4px; font-weight: 700; cursor: pointer; width: 100%; border: 1px solid transparent; font-family: inherit; margin-top: 8px; font-size: 0.9em; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-secondary { background: white; border-color: var(--border); color: var(--text-main); }
+        .btn-secondary:hover { background: #f9fafb; }
+        .btn-tertiary { background: transparent; color: var(--text-muted); padding: 6px; font-size: 0.85em; margin-top:0; }
+        .btn-tertiary:hover { color: var(--text-main); text-decoration: underline; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-icon { width: 32px; height: 32px; padding: 0; background: white; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .btn-icon.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        /* --- WIDGETS --- */
+        .swatch-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; max-height: 200px; overflow-y: auto; padding:2px; margin-bottom:10px; }
+        .swatch { aspect-ratio: 1; border-radius: 3px; cursor: pointer; border: 1px solid rgba(0,0,0,0.1); position: relative; }
+        .swatch.selected { box-shadow: 0 0 0 2px var(--primary); transform: scale(0.9); z-index:2; border-color:white; }
+        
+        .selected-list { max-height: 150px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; }
+        .selected-item { display: flex; align-items: center; padding: 6px; border-bottom: 1px solid var(--border); background: #f9fafb; }
+        .selected-item:last-child { border-bottom: none; }
+        .color-chip { width: 20px; height: 20px; border-radius: 3px; margin-right: 8px; border: 1px solid #ddd; }
+
+        .z-vis-container { display: flex; align-items: flex-end; height: 100px; background: #f9fafb; border: 1px solid var(--border); padding: 10px; gap: 10px; margin-bottom: 10px; position: relative; }
+        .z-stack { width: 40px; display: flex; flex-direction: column-reverse; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
+        .z-block { width: 100%; border: 1px solid rgba(0,0,0,0.2); }
+        .z-base { background: #e5e7eb; border-top: 2px solid #9ca3af; display: flex; align-items: center; justify-content: center; font-size: 0.7em; color: #666; }
+        .z-layer { background: var(--primary); opacity: 0.8; height: 8px; margin-bottom: 1px; }
+
+        .alert-box { padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 0.9em; display: flex; align-items: center; gap: 8px; }
+        .alert-error { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
+        .list-row { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 6px; background: #fff; cursor: pointer; }
+        .list-row.active { border-color: var(--primary); background: #eff6ff; }
+        .thumb { width: 32px; height: 32px; background-size: cover; background-position: center; background-color: #eee; border-radius: 2px; }
+
+        .row { display: flex; gap: 8px; }
+        .grow { flex: 1; }
+        .hidden { display: none; }
+        .overlay-icons { position: absolute; bottom: 20px; right: 20px; display: flex; gap: 8px; z-index: 10; }
+        .mode-icons { position: absolute; top: 20px; right: 20px; display: flex; gap: 8px; z-index: 10; }
+        .info-card { position: absolute; top: 20px; left: 20px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 4px; border: 1px solid #ccc; font-size: 0.85em; z-index:10; }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body x-data="app()" x-init="init()" x-cloak>
+
+    <header>
+        <div style="width:20px"></div>
+        <template x-for="t in tabs">
+            <div class="tab" :class="{active: activeTab === t.id}" @click="switchTab(t.id)" x-text="t.label"></div>
+        </template>
+        <div style="flex:1"></div>
+        <div class="tab" style="max-width:60px" @click="switchTab('docs')">?</div>
+    </header>
+
+    <div class="workspace">
+        
+        <div class="sidebar">
+            
+            <div x-show="activeTab === 'grid'">
+                <div class="sidebar-section">
+                    <h3>Filament Picker</h3>
+                    <div class="form-group"><input type="text" x-model="search" placeholder="Search filaments..."></div>
+                    <div class="swatch-grid">
+                        <template x-for="(f, idx) in filteredFilaments" :key="idx">
+                            <div class="swatch" :style="`background:${f.h}`" :title="f.n" :class="{selected: isSelected(f)}" @click="toggleFilament(f)"></div>
+                        </template>
+                    </div>
+                    <label>Selected (<span x-text="selectedFilaments.length"></span>)</label>
+                    <div class="selected-list">
+                        <template x-for="(f, i) in selectedFilaments" :key="i">
+                            <div class="selected-item">
+                                <div class="color-chip" :style="`background:${f.h}`"></div>
+                                <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" x-text="f.n"></div>
+                                <button style="background:none; border:none; color:red; cursor:pointer" @click="toggleFilament(f)">×</button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Constraints</h3>
+                    <div class="row">
+                        <div class="form-group grow"><label>Bed W</label><input type="number" x-model.number="config.bedW" @input="debounceGenerate"></div>
+                        <div class="form-group grow"><label>Bed H</label><input type="number" x-model.number="config.bedH" @input="debounceGenerate"></div>
+                    </div>
+                    <div class="row">
+                        <div class="form-group grow"><label>Scan W</label><input type="number" x-model.number="config.scanW" @input="debounceGenerate"></div>
+                        <div class="form-group grow"><label>Scan H</label><input type="number" x-model.number="config.scanH" @input="debounceGenerate"></div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Grid Config</h3>
+                    <div class="row">
+                        <div class="form-group grow"><label>Tile Size</label><input type="number" x-model.number="config.tileSize" @input="debounceGenerate"></div>
+                        <div class="form-group grow"><label>Gap</label><input type="number" x-model.number="config.gap" @input="debounceGenerate"></div>
+                    </div>
+                    <div class="z-vis-container">
+                        <div class="z-stack" style="height: 100%">
+                            <div class="z-block z-base" :style="`flex: 0 0 ${(config.baseLayers * config.layerH) * 20}px`">Base</div>
+                            <template x-for="i in parseInt(config.layers)">
+                                <div class="z-block z-layer" :style="`flex: 0 0 ${(config.layerH * 20)}px`"></div>
+                            </template>
+                        </div>
+                        <div style="font-size:0.8em; color:#666">
+                            Total: <strong x-text="totalHeight.toFixed(2)"></strong>mm
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="form-group grow"><label>Layers/Tile</label><input type="number" x-model.number="config.layers" min="1" @input="debounceGenerate"></div>
+                        <div class="form-group grow"><label>Layer H</label><input type="number" step="0.04" x-model.number="config.layerH"></div>
+                    </div>
+                    <div class="form-group"><label>Base Layers</label><input type="number" x-model.number="config.baseLayers"></div>
+                    
+                    <div x-show="gridStatus.error" class="alert-box alert-error">
+                        <span style="font-size:1.5em">⚠️</span>
+                        <div><strong>Error</strong><br><span x-text="gridStatus.msg"></span></div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Actions</h3>
+                    <button class="btn btn-primary" @click="generateGrid">Force Regenerate</button>
+                    <button class="btn btn-secondary" @click="exportGridJSON" :disabled="!gridData">Export JSON</button>
+                    <button class="btn btn-secondary" @click="exportGridImage" :disabled="!gridData">Export Image</button>
+                </div>
+            </div>
+
+            <div x-show="activeTab === 'scan'">
+                <div class="sidebar-section">
+                    <h3>Scan List</h3>
+                    <button class="btn btn-secondary" @click="$refs.scanUp.click()">+ Add Scan</button>
+                    <input type="file" x-ref="scanUp" class="hidden" accept="image/*" @change="addScan">
+                    <div style="margin-top:10px">
+                         <template x-for="(s, i) in scans"><div class="list-row" @click="activeScanIdx=i" :class="{active:activeScanIdx===i}">
+                             <div class="thumb" :style="`background-image:url(${s.url})`"></div>
+                             <span x-text="s.name"></span>
+                         </div></template>
+                    </div>
+                </div>
+                <div class="sidebar-section" x-show="scans.length">
+                    <h3>Alignment</h3>
+                    <div class="row"><div class="form-group grow"><label>Off X</label><input type="number" x-model.number="scans[activeScanIdx].offX" @input="drawScan"></div><div class="form-group grow"><label>Off Y</label><input type="number" x-model.number="scans[activeScanIdx].offY" @input="drawScan"></div></div>
+                    <div class="row"><div class="form-group grow"><label>Scale X</label><input type="number" step="0.01" x-model.number="scans[activeScanIdx].scaleX" @input="drawScan"></div><div class="form-group grow"><label>Scale Y</label><input type="number" step="0.01" x-model.number="scans[activeScanIdx].scaleY" @input="drawScan"></div></div>
+                    <button class="btn btn-secondary" @click="autoAlign">Auto-Align A4</button>
+                </div>
+                <div class="sidebar-section" x-show="scans.length">
+                    <h3>Analysis</h3>
+                    <button class="btn btn-primary" @click="analyzeScan">Extract Colors</button>
+                </div>
+            </div>
+
+            <div x-show="activeTab === 'process'">
+                <div class="sidebar-section">
+                    <h3>Input</h3>
+                    <button class="btn btn-secondary" @click="$refs.imgUp.click()">Upload Image</button>
+                    <input type="file" x-ref="imgUp" class="hidden" accept="image/*" @change="loadProcessImage">
+                    <div class="form-group" style="margin-top:10px">
+                        <label>Mode</label>
+                        <div class="row">
+                            <label style="font-weight:400"><input type="radio" name="mode" value="raster" x-model="procMode"> Raster</label>
+                            <label style="font-weight:400"><input type="radio" name="mode" value="vector" x-model="procMode"> Vector</label>
+                        </div>
+                    </div>
+                </div>
+                <div x-show="procMode === 'raster'">
+                    <div class="sidebar-section">
+                        <h3>Raster Config</h3>
+                        <div class="form-group"><label>Colors</label><input type="number" x-model.number="raster.maxColors" min="2"></div>
+                        <div class="form-group"><label>Noise</label><input type="range" x-model.number="raster.noise" min="0" max="50"></div>
+                        <div class="form-group"><label>Dither</label><select x-model="raster.dither"><option value="none">None</option><option value="floyd">Floyd-Steinberg</option></select></div>
+                    </div>
+                    <div class="sidebar-section"><button class="btn btn-primary" @click="processRaster" :disabled="!procImg">Quantize</button></div>
+                </div>
+                <div x-show="procMode === 'vector'">
+                    <div class="sidebar-section">
+                        <h3>Vector Config</h3>
+                        <div class="form-group"><label>Simplify</label><input type="range" step="0.1" min="0" max="10" x-model.number="vector.simplify"></div>
+                        <div class="form-group"><label>Colors</label><input type="number" x-model.number="vector.colors" min="2"></div>
+                    </div>
+                    <div class="sidebar-section"><button class="btn btn-primary" @click="processVector" :disabled="!procImg">Trace SVG</button></div>
+                </div>
+            </div>
+
+            <div x-show="activeTab === 'model'">
+                <div class="sidebar-section">
+                    <h3>Source</h3>
+                    <div class="form-group"><label style="font-weight:400"><input type="radio" name="msrc" value="raster" x-model="model.source"> Raster Output</label></div>
+                </div>
+                <div class="sidebar-section">
+                    <h3>Geometry</h3>
+                    <div class="form-group"><label>Min Height</label><input type="number" step="0.1" x-model.number="model.minH"></div>
+                    <div class="form-group"><label>Max Height</label><input type="number" step="0.1" x-model.number="model.maxH"></div>
+                    <div class="form-group"><label><input type="checkbox" x-model="model.smoothing"> Smoothing</label></div>
+                </div>
+                <div class="sidebar-section"><button class="btn btn-primary" @click="generateModel">Generate Mesh</button></div>
+            </div>
+
+            <div x-show="activeTab === 'export'">
+                <div class="sidebar-section">
+                    <h3>Export</h3>
+                    <div class="form-group"><label><input type="checkbox" checked disabled> Binary STL</label></div>
+                    <div class="form-group"><label><input type="checkbox" x-model="exportOpts.palette"> Palette JSON</label></div>
+                    <button class="btn btn-primary" @click="runExport" :disabled="!meshReady">Download STL</button>
+                </div>
+            </div>
+            
+            <div x-show="activeTab === 'docs'">
+                <div class="sidebar-section">
+                    <h3>Help</h3>
+                    <button class="btn btn-tertiary" onclick="document.getElementById('d1').scrollIntoView()">Grid</button>
+                    <button class="btn btn-tertiary" onclick="document.getElementById('d2').scrollIntoView()">Scan</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="pane-right" x-ref="viewport" @mousedown="startDrag" @mousemove="doDrag" @mouseup="endDrag" @wheel.prevent="doZoom">
+            
+            <div x-show="activeTab === 'docs'" class="canvas-area" style="display:block; overflow-y:auto; padding:40px; background:white; cursor:auto" @mousedown.stop>
+                <h1>Documentation</h1>
+                <section id="d1"><h2>Grid</h2><p>Select filaments, check dimensions, generate grid.</p></section>
+                <section id="d2"><h2>Scan</h2><p>Upload scan, align grid, extract colors.</p></section>
+            </div>
+
+            <div x-show="activeTab !== 'docs'" class="canvas-area">
+                <div class="canvas-wrapper" :style="`transform: translate(${view.x}px, ${view.y}px) scale(${view.scale})`">
+                    
+                    <canvas x-ref="gridCanvas" x-show="activeTab === 'grid'"></canvas>
+                    <canvas x-ref="scanCanvas" x-show="activeTab === 'scan'"></canvas>
+                    
+                    <canvas x-ref="procCanvas" x-show="activeTab === 'process' && procMode === 'raster'"></canvas>
+                    <div x-ref="svgCont" x-show="activeTab === 'process' && procMode === 'vector'" style="width:500px; height:500px; background:white; display:flex;"></div>
+                    
+                    <div x-ref="threeCont" x-show="activeTab === 'model'" style="width:800px; height:600px; background:#222"></div>
+                </div>
+            </div>
+
+            <div class="info-card" x-show="activeTab === 'grid' && gridData">
+                <div style="font-weight:700; border-bottom:1px solid #ccc">Metrics</div>
+                <div>Seqs: <span x-text="gridData.seqs.length"></span></div>
+                <div>Size: <span x-text="`${gridData.width.toFixed(1)}x${gridData.height.toFixed(1)}mm`"></span></div>
+            </div>
+
+            <div class="mode-icons" x-show="activeTab === 'process'">
+                <button class="btn-icon" :class="{active: procView === 'orig'}" @click="toggleProcView('orig')">O</button>
+                <button class="btn-icon" :class="{active: procView === 'res'}" @click="toggleProcView('res')">R</button>
+            </div>
+
+            <div class="overlay-icons" x-show="activeTab !== 'docs'">
+                <button class="btn-icon" @click="zoom(0.1)">+</button>
+                <button class="btn-icon" @click="zoom(-0.1)">-</button>
+                <button class="btn-icon" @click="resetView">R</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const COLOURS=[{h:"#FF7746",n:"Orange HF PETG"},{h:"#FFCE26",n:"Translucent Orange"},{h:"#FFFFFF",n:"White PETG"},{h:"#CC3F45",n:"Red PLA/PETG"},{h:"#A3A6AA",n:"HF Grey PETG"},{h:"#4FC359",n:"Alpine Green Sparkle"},{h:"#0AC789",n:"Basic Transparent PETG"},{h:"#56A4AD",n:"Dark Green PLA Matte"},{h:"#616364",n:"Matte Charcoal Grey PLA"},{h:"#3F9CCC",n:"Blue Silk PLA"},{h:"#BC9091",n:"Grey TPU/TPE"},{h:"#F0FEF3",n:"White TPU/TPE"},{h:"#6479B8",n:"Blue Grey PLA"},{h:"#F0D0DC",n:"Pink PETG CF"},{h:"#931010",n:"Dark Red TPU/TPE"},{h:"#4C484A",n:"Black PA6GF CF"},{h:"#966451",n:"Trim Grey Metallic PLA"},{h:"#FFE825",n:"Sunflower Yellow PLA"},{h:"#F4AFF3",n:"Merlot Plum PLA"},{h:"#6565F2",n:"Purple PLA"},{h:"#5A7BC0",n:"Metallic Cobalt Blue PLA"},{h:"#4F9756",n:"Neptune PLA Galaxy"},{h:"#76654F",n:"Grass Green PLA"},{h:"#FC9257",n:"Mandarin Orange PLA"},{h:"#EF9CA1",n:"Pink PLA"},{h:"#4C5752",n:"Purple Galaxy PLA"},{h:"#FF9399",n:"Light Grey CF PLA"},{h:"#4C9BF6",n:"Gold Metallic PLA"},{h:"#EEC4C1",n:"Pink Silk PLA"},{h:"#932DA1",n:"Marine Blue PLA"},{h:"#954D3F",n:"Marble Red PLA"},{h:"#B67254",n:"Bronze PLA"},{h:"#607745",n:"Olive Green PLA"},{h:"#3DCE59",n:"Alpine Green PLA"},{h:"#2E7799",n:"Medullosa Green PLA"},{h:"#B35C3F",n:"Crimson Red Sparkle PLA"},{h:"#BB7398",n:"Purple Grey PLA"},{h:"#A0B499",n:"Anti-Grey PLA"},{h:"#A7A344",n:"Chartreuse PLA"},{h:"#6D9553",n:"Green PLA"},{h:"#FECADE",n:"White Jade PLA"},{h:"#C13C40",n:"Red PLA"},{h:"#00B8DC",n:"Cyan PLA"},{h:"#C25498",n:"Magenta PLA"},{h:"#FED003",n:"Yellow PLA"},{h:"#09A4CE",n:"Sky Blue PLA"},{h:"#939393",n:"Grey PLA"},{h:"#444443",n:"Black PETG"},{h:"#60AF73",n:"Violet Purple PETG"},{h:"#2B8F98",n:"Teal PLA"},{h:"#BB7935",n:"Copper Silk PLA"},{h:"#EDCE1A",n:"Gold Silk PLA"},{h:"#F9D7E1",n:"Pale Pink PLA"},{h:"#D346A1",n:"Hot Pink PLA"},{h:"#787899",n:"Lilac Purple PLA"},{h:"#FCFB96",n:"Pale Yellow PLA"},{h:"#FFC968",n:"Golden Yellow PLA"},{h:"#B3CF3F",n:"Lime Green Metallic PLA"},{h:"#FDF192",n:"Lemon Yellow Silk PLA"},{h:"#D34651",n:"Scarlet Red Silk PLA"},{h:"#B09A5E",n:"Tan TPU/TPE"},{h:"#999564",n:"Olive Grey PLA"},{h:"#999939",n:"Dark Olive PLACF PLA"},{h:"#0DA553",n:"Forest Green PLA"},{h:"#B57B5E",n:"Bronze Silk PLA"},{h:"#09CD04",n:"Silver Metallic Silk PLA"},{h:"#0FD7E1",n:"Ice Blue PLA"},{h:"#9589BC",n:"Lavender Purple PLA"},{h:"#00A4CE",n:"Bright Cyan PLA"},{h:"#00A553",n:"Bambu Green PLA"},{h:"#404D3C",n:"Forest Black PLA"},{h:"#FF6B9D",n:"Hot Magenta PLA"},{h:"#8B4513",n:"Saddle Brown PLA"},{h:"#FFD700",n:"Gold PLA"},{h:"#000000",n:"Black Basic"},{h:"#FFFFFF",n:"White Basic"}];
+
+        function app() {
+            return {
+                tabs: [{id:'grid', label:'Grid'}, {id:'scan', label:'Scan'}, {id:'process', label:'Process'}, {id:'model', label:'Model'}, {id:'export', label:'Export'}],
+                activeTab: 'grid', search: '',
+                
+                selectedFilaments: [],
+                config: { bedW: 256, bedH: 256, scanW: 210, scanH: 297, layerH: 0.08, baseLayers: 3, layers: 4, tileSize: 10, gap: 1 },
+                gridData: null, gridStatus: {error:false, msg:''},
+                
+                scans: [], activeScanIdx: 0, extractedPalette: [],
+                procFile: null, procImg: null, procMode: 'raster', procView: 'res',
+                raster: { palSource: 'grid', maxColors: 4, dither: 'floyd', noise: 0, pal: [] },
+                vector: { simplify: 1.0, colors: 4 },
+                processedData: null,
+                
+                model: { source: 'raster', minH: 0.2, maxH: 2.0, smoothing: false },
+                meshReady: false,
+                exportOpts: { palette: true },
+                
+                view: { x:0, y:0, scale:1, dragging:false, lx:0, ly:0 },
+                three: { scene:null, cam:null, ren:null, mesh:null },
+                debounceTimer: null,
+
+                get filteredFilaments() { return !this.search ? COLOURS : COLOURS.filter(f => f.n.toLowerCase().includes(this.search.toLowerCase())); },
+                get totalHeight() { return (this.config.baseLayers * this.config.layerH) + (this.config.layers * this.config.layerH); },
+
+                init() {
+                    noise.seed(Math.random());
+                    this.initThree();
+                    this.toggleFilament(COLOURS[COLOURS.length-2]);
+                    this.toggleFilament(COLOURS[COLOURS.length-1]);
+                    this.generateGrid();
+                },
+
+                // GRID
+                switchTab(id) { this.activeTab = id; setTimeout(()=>this.resetView(), 10); },
+                isSelected(f) { return this.selectedFilaments.includes(f); },
+                toggleFilament(f) { 
+                    if(this.isSelected(f)) this.selectedFilaments = this.selectedFilaments.filter(x=>x!==f);
+                    else if(this.selectedFilaments.length < 10) this.selectedFilaments.push(f);
+                    this.debounceGenerate();
+                },
+                debounceGenerate() { clearTimeout(this.debounceTimer); this.debounceTimer = setTimeout(()=>this.generateGrid(), 500); },
+                generateSequences(N, M) {
+                    let seqs = [];
+                    function gen(cur, d) { if(d===M) { if(!cur.every(v=>v===0)) seqs.push([...cur]); return; } for(let v=0;v<=N;v++) gen([...cur,v],d+1); }
+                    gen([],0); return seqs;
+                },
+                hex2rgb(h) { let m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h); return m?{r:parseInt(m[1],16),g:parseInt(m[2],16),b:parseInt(m[3],16)}:{r:0,g:0,b:0}; },
+                simColour(seq, cols) {
+                    let r=0,g=0,b=0,c=0;
+                    for(let i=0;i<seq.length;i++){ if(seq[i]>0){ let rgb=this.hex2rgb(cols[seq[i]-1].h); r+=rgb.r; g+=rgb.g; b+=rgb.b; c++; } }
+                    return c===0 ? {r:255,g:255,b:255} : {r:Math.round(r/c),g:Math.round(g/c),b:Math.round(b/c)};
+                },
+                generateGrid() {
+                    if(this.selectedFilaments.length < 2) return;
+                    const seqs = this.generateSequences(this.selectedFilaments.length, this.config.layers);
+                    const maxW = Math.min(this.config.bedW, this.config.scanW);
+                    const maxH = Math.min(this.config.bedH, this.config.scanH);
+                    const step = this.config.tileSize + this.config.gap;
+                    const cAvail = Math.floor((maxW+this.config.gap)/step);
+                    const rAvail = Math.floor((maxH+this.config.gap)/step);
+                    
+                    let gCols = Math.ceil(Math.sqrt(seqs.length));
+                    let gRows = Math.ceil(seqs.length / gCols);
+                    
+                    this.gridStatus = {error:false, msg:''};
+                    if(gCols > cAvail || gRows > rAvail) { this.gridStatus = {error:true, msg:`Fits ${cAvail}x${rAvail}, needs ${gCols}x${gRows}`}; }
+                    
+                    this.gridData = { seqs, rows:gRows, cols:gCols, width: gCols*step-this.config.gap, height: gRows*step-this.config.gap };
+                    this.drawGridCanvas();
+                },
+                drawGridCanvas() {
+                    const cvs = this.$refs.gridCanvas; const ctx = cvs.getContext('2d'); const sc=5;
+                    cvs.width = this.gridData.width*sc + 40; cvs.height = this.gridData.height*sc + 40;
+                    ctx.fillStyle='#fff'; ctx.fillRect(0,0,cvs.width,cvs.height);
+                    const ts=this.config.tileSize*sc, gap=this.config.gap*sc;
+                    this.gridData.seqs.forEach((seq, i) => {
+                        const r=Math.floor(i/this.gridData.cols), c=i%this.gridData.cols;
+                        const col=this.simColour(seq, this.selectedFilaments);
+                        ctx.fillStyle=`rgb(${col.r},${col.g},${col.b})`; ctx.fillRect(20+c*(ts+gap), 20+r*(ts+gap), ts, ts);
+                    });
+                    if(this.gridStatus.error) { ctx.strokeStyle='red'; ctx.lineWidth=5; ctx.strokeRect(10,10,cvs.width-20,cvs.height-20); }
+                    this.raster.pal = this.gridData.seqs.map(s => this.simColour(s, this.selectedFilaments));
+                    this.resetView();
+                },
+                exportGridJSON() { saveAs(new Blob([JSON.stringify(this.config)],{type:'application/json'}), 'grid.json'); },
+                exportGridImage() { this.$refs.gridCanvas.toBlob(b=>saveAs(b, 'grid.png')); },
+
+                // SCAN
+                addScan(e) {
+                    const f=e.target.files[0]; if(!f) return;
+                    const i=new Image(); i.onload=()=>{ this.scans.push({name:f.name, img:i, url:i.src, offX:0, offY:0, scaleX:1, scaleY:1}); this.activeScanIdx=this.scans.length-1; this.drawScan(); }; i.src=URL.createObjectURL(f);
+                },
+                drawScan() {
+                    if(!this.scans.length) return;
+                    const s=this.scans[this.activeScanIdx]; const cvs=this.$refs.scanCanvas; const ctx=cvs.getContext('2d');
+                    cvs.width=s.img.width; cvs.height=s.img.height; ctx.drawImage(s.img,0,0);
+                    if(this.gridData) {
+                        ctx.save(); ctx.translate(s.offX, s.offY); ctx.scale(s.scaleX, s.scaleY);
+                        ctx.strokeStyle='rgba(255,0,0,0.5)'; ctx.lineWidth=5;
+                        const rW = this.gridData.width * (s.img.width / this.config.scanW);
+                        const rH = this.gridData.height * (s.img.height / this.config.scanH);
+                        ctx.strokeRect(0,0,rW,rH); ctx.restore();
+                    }
+                    this.resetView();
+                },
+                autoAlign() { const s=this.scans[this.activeScanIdx]; if(s){s.offX=100; s.offY=100; s.scaleX=0.9; s.scaleY=0.9; this.drawScan();} },
+                analyzeScan() {
+                    // Extract colors from scan
+                    const s = this.scans[this.activeScanIdx];
+                    const ctx = this.$refs.scanCanvas.getContext('2d');
+                    this.extractedPalette = [];
+                    for(let i=0; i<10; i++) {
+                        const d = ctx.getImageData(Math.random()*s.img.width, Math.random()*s.img.height, 1, 1).data;
+                        this.extractedPalette.push({r:d[0],g:d[1],b:d[2]});
+                    }
+                    this.raster.pal = this.extractedPalette;
+                    alert("Extracted " + this.extractedPalette.length + " colors.");
+                },
+
+                // PROCESS
+                loadProcessImage(e) {
+                    this.procFile=e.target.files[0]; const i=new Image(); i.onload=()=>{ this.procImg=i; this.toggleProcView('orig'); }; i.src=URL.createObjectURL(this.procFile);
+                },
+                toggleProcView(v) {
+                    this.procView = v;
+                    const cvs = this.$refs.procCanvas; const ctx = cvs.getContext('2d');
+                    if(v === 'orig' && this.procImg) { cvs.width=this.procImg.width; cvs.height=this.procImg.height; ctx.drawImage(this.procImg,0,0); }
+                    else if(v === 'res' && this.processedData) { cvs.width=this.processedData.width; cvs.height=this.processedData.height; ctx.putImageData(this.processedData,0,0); }
+                    this.resetView();
+                },
+                processRaster() {
+                    const cvs=this.$refs.procCanvas; const ctx=cvs.getContext('2d');
+                    cvs.width=this.procImg.width; cvs.height=this.procImg.height; ctx.drawImage(this.procImg,0,0);
+                    const id=ctx.getImageData(0,0,cvs.width,cvs.height); const d=id.data;
+                    const pal = this.raster.pal.length ? this.raster.pal : [{r:0,g:0,b:0},{r:255,g:255,b:255}];
+                    
+                    for(let i=0; i<d.length; i+=4) {
+                        const n = (Math.random()-0.5) * this.raster.noise;
+                        const r=d[i]+n, g=d[i+1]+n, b=d[i+2]+n;
+                        let min=Infinity, c=pal[0];
+                        for(let p of pal) { const dst=(r-p.r)**2+(g-p.g)**2+(b-p.b)**2; if(dst<min){min=dst;c=p;} }
+                        if(this.raster.dither==='floyd'){
+                            const er=r-c.r, eg=g-c.g, eb=b-c.b;
+                            // Simplest error diffusion
+                            if((i+4)<d.length) { d[i+4]+=er*0.5; d[i+5]+=eg*0.5; d[i+6]+=eb*0.5; } 
+                        }
+                        d[i]=c.r; d[i+1]=c.g; d[i+2]=c.b;
+                    }
+                    this.processedData = id; this.toggleProcView('res');
+                },
+                processVector() {
+                    ImageTracer.imageToSVG(this.procImg.src, (svg)=>{ this.$refs.svgCont.innerHTML=svg; }, {numberofcolors:this.vector.colors, simplify:this.vector.simplify});
+                },
+
+                // MODEL
+                initThree() {
+                    this.three.scene = new THREE.Scene();
+                    this.three.cam = new THREE.PerspectiveCamera(75, 800/600, 0.1, 1000);
+                    this.three.ren = new THREE.WebGLRenderer({antialias:true});
+                    this.three.ren.setSize(800,600);
+                    this.$refs.threeCont.appendChild(this.three.ren.domElement);
+                    this.three.cam.position.set(0, -100, 100); this.three.cam.lookAt(0,0,0);
+                    this.three.scene.add(new THREE.AmbientLight(0x404040));
+                    this.three.scene.add(new THREE.DirectionalLight(0xffffff,1));
+                    const loop = () => { requestAnimationFrame(loop); this.three.ren.render(this.three.scene, this.three.cam); }; loop();
+                },
+                generateModel() {
+                    if(!this.processedData && this.model.source==='raster') return alert("No raster data");
+                    if(this.three.mesh) this.three.scene.remove(this.three.mesh);
+                    
+                    const w=200, h=200; // Resample
+                    const geo = new THREE.PlaneGeometry(150, 150, w-1, h-1);
+                    const pos = geo.attributes.position;
+                    // Mock sampling
+                    for(let i=0; i<pos.count; i++) { pos.setZ(i, this.model.minH + Math.random()*(this.model.maxH-this.model.minH)); }
+                    geo.computeVertexNormals();
+                    this.three.mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({color:0xcccccc, flatShading:!this.model.smoothing}));
+                    this.three.scene.add(this.three.mesh);
+                    this.meshReady = true;
+                },
+
+                // EXPORT
+                runExport() {
+                    if(!this.three.mesh) return;
+                    const count = this.three.mesh.geometry.attributes.position.count;
+                    const buf = new ArrayBuffer(84 + count*50);
+                    const dv = new DataView(buf);
+                    dv.setUint32(80, count/3, true);
+                    // Mock write
+                    saveAs(new Blob([buf], {type:'application/octet-stream'}), 'model.stl');
+                },
+
+                zoom(d) { this.view.scale=Math.max(0.1, this.view.scale+d); },
+                doZoom(e) { this.zoom(e.deltaY>0?-0.1:0.1); },
+                resetView() { this.view.scale=0.8; this.view.x=0; this.view.y=0; },
+                startDrag(e) { this.view.dragging=true; this.view.lx=e.clientX; this.view.ly=e.clientY; },
+                doDrag(e) { if(this.view.dragging){this.view.x+=e.clientX-this.view.lx; this.view.y+=e.clientY-this.view.ly; this.view.lx=e.clientX; this.view.ly=e.clientY;} },
+                endDrag() { this.view.dragging=false; }
+            }
+        }
+    </script>
+</body>
+</html>
