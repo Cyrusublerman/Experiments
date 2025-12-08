@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HueForge-Lite - Modular</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    font-family: 'Space Mono', monospace;
+    background: #f3f4f6;
+    color: #1f2937;
+    font-size: 14px;
+    padding: 20px;
+}
+
+.container { max-width: 1400px; margin: 0 auto; }
+h1 { font-size: 24px; margin-bottom: 20px; }
+h2 { font-size: 18px; margin: 20px 0 12px 0; text-transform: uppercase; letter-spacing: 0.05em; }
+h3 { font-size: 14px; margin: 12px 0 8px 0; font-weight: 700; color: #6b7280; }
+
+.section {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; padding: 16px; margin-bottom: 12px; }
+
+label { display: block; margin-bottom: 8px; font-size: 13px; }
+input[type="text"], input[type="number"], input[type="file"], select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 13px;
+}
+input[type="checkbox"], input[type="radio"] { margin-right: 6px; }
+
+button {
+    padding: 10px 16px;
+    border: 1px solid #2563eb;
+    border-radius: 4px;
+    background: #2563eb;
+    color: white;
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 13px;
+    margin-right: 8px;
+    margin-top: 8px;
+}
+button:hover { background: #1d4ed8; }
+button.secondary { background: white; color: #1f2937; border-color: #d1d5db; }
+button.secondary:hover { background: #f9fafb; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+    gap: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+}
+.swatch {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    cursor: pointer;
+    border: 2px solid transparent;
+}
+.swatch.selected { border-color: #2563eb; transform: scale(0.9); }
+
+.canvas-wrap {
+    position: relative;
+    background: #e5e7eb;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: auto;
+}
+canvas {
+    max-width: 100%;
+    max-height: 500px;
+    image-rendering: pixelated;
+}
+
+.msg {
+    padding: 12px;
+    border-radius: 4px;
+    margin-top: 12px;
+    font-size: 13px;
+}
+.msg.ok { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+.msg.err { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+.msg.info { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+.hidden { display: none !important; }
+
+.stats {
+    display: flex;
+    gap: 16px;
+    margin-top: 16px;
+    padding: 12px;
+    background: #f9fafb;
+    border-radius: 4px;
+}
+.stat { text-align: center; }
+.stat-val { font-size: 20px; font-weight: 700; color: #2563eb; }
+.stat-lbl { font-size: 11px; color: #6b7280; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>HueForge-Lite Studio (Modular)</h1>
+
+<!-- STEP 1: Grid Generation -->
+<div class="section">
+<h2>Step 1: Generate Calibration Grid</h2>
+
+<div class="box">
+<h3>Select Filament Colors (2-10) - Selected: <span id="selCount">0</span></h3>
+<input type="text" id="searchColors" placeholder="Search colors..." style="margin-bottom:8px">
+<div id="colorGrid" class="color-grid"></div>
+</div>
+
+<div class="grid-2">
+<div class="box">
+<h3>Dimensions</h3>
+<label>Bed: <input type="number" id="bedW" value="256">×<input type="number" id="bedH" value="256">mm</label>
+<label>Scan (A4): <input type="number" id="scanW" value="210">×<input type="number" id="scanH" value="297">mm</label>
+<label>Tile Size: <input type="number" id="tileSize" value="10" step="0.5">mm</label>
+<label>Gap: <input type="number" id="gap" value="1" step="0.5">mm</label>
+</div>
+
+<div class="box">
+<h3>Layers</h3>
+<label>Layers/Tile: <input type="number" id="layers" value="4" min="1" max="10"></label>
+<label>Layer Height: <input type="number" id="layerH" value="0.08" step="0.01">mm</label>
+<label>Base Layers: <input type="number" id="baseLayers" value="3" min="0"></label>
+</div>
+</div>
+
+<button onclick="generateGrid()">Generate Grid</button>
+<button class="secondary" onclick="exportGridJSON()">Export JSON</button>
+<button class="secondary" onclick="exportGridSTLs()">Export STLs</button>
+
+<div id="gridBox" class="box hidden">
+<h3>Grid Preview</h3>
+<div class="canvas-wrap">
+<canvas id="gridCanvas"></canvas>
+</div>
+<div class="stats">
+<div class="stat"><div class="stat-val" id="totSeqs">0</div><div class="stat-lbl">Sequences</div></div>
+<div class="stat"><div class="stat-val" id="gridSize">0×0mm</div><div class="stat-lbl">Size</div></div>
+</div>
+</div>
+
+<div id="msg1" class="msg hidden"></div>
+</div>
+
+<!-- STEP 2: Scan Analysis -->
+<div class="section">
+<h2>Step 2: Scan Analysis</h2>
+
+<div class="box">
+<h3>Upload Scan</h3>
+<input type="file" id="scanFile" accept="image/*">
+</div>
+
+<button id="analyzeBtn" onclick="analyzeScan()" disabled>Extract Colors</button>
+<button class="secondary" onclick="exportPalette()">Export Palette (GPL)</button>
+
+<div id="scanBox" class="box hidden">
+<h3>Extracted Palette (<span id="paletteCount">0</span> colors)</h3>
+<div id="palettePreview" class="color-grid" style="max-height:150px"></div>
+</div>
+
+<div id="msg2" class="msg hidden"></div>
+</div>
+
+<!-- STEP 3: Image Quantization -->
+<div class="section">
+<h2>Step 3: Image Quantization</h2>
+
+<div class="box">
+<h3>Upload Image</h3>
+<input type="file" id="imageFile" accept="image/*">
+</div>
+
+<div class="grid-2">
+<div class="box">
+<h3>Options</h3>
+<label>Print Width: <input type="number" id="printW" value="170" min="10">mm</label>
+<label>Max Colors: <input type="number" id="maxColors" value="4" min="2"></label>
+<label><input type="checkbox" id="dither" checked> Floyd-Steinberg Dithering</label>
+<label><input type="checkbox" id="applyMinDetail"> Apply Min-Detail Filter (1mm)</label>
+</div>
+</div>
+
+<button id="quantBtn" onclick="quantizeImage()" disabled>Quantize</button>
+<button class="secondary" onclick="exportArtworkSTLs()">Export Artwork STLs</button>
+
+<div id="quantBox" class="box hidden">
+<h3>Result</h3>
+<div class="canvas-wrap">
+<canvas id="quantCanvas"></canvas>
+</div>
+</div>
+
+<div id="msg3" class="msg hidden"></div>
+</div>
+
+</div>
+
+<!-- Include FileSaver.js for downloads -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+<!-- Main Application Script -->
+<script type="module">
+import * as HFL from './lib/index.js';
+
+// Global state
+window.app = {
+    selectedColors: [],
+    gridData: null,
+    sequenceMap: null,
+    palette: null,
+    quantizedImage: null,
+    layerMaps: null
+};
+
+// Initialize color picker
+function initColorPicker() {
+    const grid = document.getElementById('colorGrid');
+    const search = document.getElementById('searchColors');
+
+    function renderColors(filter = '') {
+        grid.innerHTML = '';
+        const filtered = filter ?
+            HFL.COLOURS.filter(c => c.n.toLowerCase().includes(filter.toLowerCase())) :
+            HFL.COLOURS;
+
+        filtered.forEach(color => {
+            const swatch = document.createElement('div');
+            swatch.className = 'swatch';
+            swatch.style.background = color.h;
+            swatch.title = color.n;
+            swatch.onclick = () => toggleColor(color);
+            grid.appendChild(swatch);
+        });
+        updateSelection();
+    }
+
+    search.oninput = (e) => renderColors(e.target.value);
+    renderColors();
+}
+
+function toggleColor(color) {
+    const idx = window.app.selectedColors.findIndex(c => c.h === color.h);
+    if (idx >= 0) {
+        window.app.selectedColors.splice(idx, 1);
+    } else if (window.app.selectedColors.length < 10) {
+        window.app.selectedColors.push(color);
+    }
+    updateSelection();
+}
+
+function updateSelection() {
+    document.getElementById('selCount').textContent = window.app.selectedColors.length;
+    document.querySelectorAll('.swatch').forEach(el => {
+        const bg = el.style.background;
+        const isSelected = window.app.selectedColors.some(c => c.h === bg || el.style.background.includes(c.h));
+        el.classList.toggle('selected', isSelected);
+    });
+}
+
+// Generate grid
+window.generateGrid = async function() {
+    if (window.app.selectedColors.length < 2) {
+        showMsg(1, 'Please select at least 2 colors', 'err');
+        return;
+    }
+
+    showMsg(1, 'Generating...', 'info');
+
+    try {
+        // Get config
+        const config = {
+            bedW: +document.getElementById('bedW').value,
+            bedH: +document.getElementById('bedH').value,
+            scanW: +document.getElementById('scanW').value,
+            scanH: +document.getElementById('scanH').value,
+            tileSize: +document.getElementById('tileSize').value,
+            gap: +document.getElementById('gap').value,
+            layers: +document.getElementById('layers').value,
+            layerHeight: +document.getElementById('layerH').value,
+            baseLayers: +document.getElementById('baseLayers').value
+        };
+
+        // Generate sequences
+        const sequences = HFL.generateSequences(window.app.selectedColors.length, config.layers);
+
+        // Calculate constraints
+        const constraints = HFL.calculateConstraints({
+            bedW: config.bedW,
+            bedH: config.bedH,
+            scanW: config.scanW,
+            scanH: config.scanH
+        });
+
+        // Calculate layout
+        const layout = HFL.calculateGridLayout({
+            sequenceCount: sequences.length,
+            tileSize: config.tileSize,
+            gap: config.gap,
+            maxWidth: constraints.maxWidth,
+            maxHeight: constraints.maxHeight
+        });
+
+        if (!layout.fits) {
+            showMsg(1, layout.error, 'err');
+            return;
+        }
+
+        // Build grid data
+        window.app.gridData = {
+            sequences,
+            colours: window.app.selectedColors,
+            rows: layout.rows,
+            cols: layout.cols,
+            tileSize: config.tileSize,
+            gap: config.gap,
+            width: layout.width,
+            height: layout.height,
+            emptyCells: layout.emptyCells
+        };
+
+        // Build sequence map
+        window.app.sequenceMap = HFL.buildSequenceMap(
+            sequences,
+            window.app.selectedColors,
+            layout.cols
+        );
+
+        // Draw grid
+        const canvas = document.getElementById('gridCanvas');
+        HFL.drawGrid(canvas, window.app.gridData, { scale: 1 });
+
+        // Update UI
+        document.getElementById('gridBox').classList.remove('hidden');
+        document.getElementById('totSeqs').textContent = sequences.length;
+        document.getElementById('gridSize').textContent = `${layout.width.toFixed(1)}×${layout.height.toFixed(1)}mm`;
+
+        showMsg(1, `✓ Generated ${sequences.length} sequences in ${layout.rows}×${layout.cols} grid`, 'ok');
+    } catch (e) {
+        showMsg(1, `Error: ${e.message}`, 'err');
+    }
+};
+
+// Export grid JSON
+window.exportGridJSON = function() {
+    if (!window.app.gridData) return;
+    const json = HFL.exportGridJSON(window.app.gridData, {
+        layers: +document.getElementById('layers').value,
+        layerHeight: +document.getElementById('layerH').value,
+        baseLayers: +document.getElementById('baseLayers').value
+    });
+    saveAs(new Blob([json], {type: 'application/json'}), 'grid.json');
+    showMsg(1, '✓ Exported', 'ok');
+};
+
+// Export grid STLs
+window.exportGridSTLs = function() {
+    if (!window.app.gridData) return;
+    showMsg(1, 'Generating STLs...', 'info');
+
+    setTimeout(() => {
+        const stls = HFL.exportGridSTLs(window.app.gridData, {
+            layerHeight: +document.getElementById('layerH').value,
+            baseLayers: +document.getElementById('baseLayers').value,
+            baseColorIndex: -1
+        });
+
+        Object.entries(stls).forEach(([filename, content]) => {
+            saveAs(new Blob([content], {type: 'text/plain'}), filename);
+        });
+
+        showMsg(1, `✓ Exported ${Object.keys(stls).length} STL files`, 'ok');
+    }, 100);
+};
+
+// Scan file upload
+document.getElementById('scanFile').onchange = function(e) {
+    if (!window.app.gridData) {
+        showMsg(2, 'Generate grid first', 'err');
+        return;
+    }
+
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const img = new Image();
+    img.onload = () => {
+        window.app.scanImage = img;
+        document.getElementById('analyzeBtn').disabled = false;
+        showMsg(2, '✓ Scan loaded', 'ok');
+    };
+    img.src = URL.createObjectURL(file);
+};
+
+// Analyze scan
+window.analyzeScan = function() {
+    if (!window.app.scanImage || !window.app.gridData) return;
+
+    showMsg(2, 'Extracting colors...', 'info');
+
+    setTimeout(() => {
+        // Create canvas with scan
+        const canvas = document.createElement('canvas');
+        canvas.width = window.app.scanImage.width;
+        canvas.height = window.app.scanImage.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(window.app.scanImage, 0, 0);
+
+        // Auto-calculate scale for A4
+        const alignment = HFL.autoCalculateScale(
+            canvas.width,
+            canvas.height,
+            window.app.gridData.width,
+            window.app.gridData.height
+        );
+        alignment.offsetX = 100; // Default offset
+        alignment.offsetY = 100;
+
+        // Extract colors
+        const { palette } = HFL.extractColors(canvas, window.app.gridData, alignment);
+        window.app.palette = palette;
+
+        // Display palette
+        const preview = document.getElementById('palettePreview');
+        preview.innerHTML = '';
+        palette.forEach(c => {
+            const swatch = document.createElement('div');
+            swatch.className = 'swatch';
+            swatch.style.background = `rgb(${c.r},${c.g},${c.b})`;
+            preview.appendChild(swatch);
+        });
+
+        document.getElementById('paletteCount').textContent = palette.length;
+        document.getElementById('scanBox').classList.remove('hidden');
+        showMsg(2, `✓ Extracted ${palette.length} colors`, 'ok');
+
+        // Enable quantization
+        if (window.app.imageLoaded) {
+            document.getElementById('quantBtn').disabled = false;
+        }
+    }, 100);
+};
+
+// Export palette
+window.exportPalette = function() {
+    if (!window.app.palette) return;
+    const gpl = HFL.generateGPL(window.app.palette, 'Extracted');
+    saveAs(new Blob([gpl], {type: 'text/plain'}), 'palette.gpl');
+    showMsg(2, '✓ Exported', 'ok');
+};
+
+// Image file upload
+document.getElementById('imageFile').onchange = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const img = new Image();
+    img.onload = () => {
+        window.app.artworkImage = img;
+        window.app.imageLoaded = true;
+        if (window.app.palette) {
+            document.getElementById('quantBtn').disabled = false;
+        }
+        showMsg(3, '✓ Image loaded', 'ok');
+    };
+    img.src = URL.createObjectURL(file);
+};
+
+// Quantize image
+window.quantizeImage = function() {
+    if (!window.app.artworkImage || !window.app.palette || !window.app.sequenceMap) return;
+
+    showMsg(3, 'Quantizing...', 'info');
+
+    setTimeout(() => {
+        try {
+            // Create canvas with image
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = window.app.artworkImage.width;
+            tempCanvas.height = window.app.artworkImage.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(window.app.artworkImage, 0, 0);
+
+            // Get image data
+            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+
+            // Quantize
+            const maxColors = +document.getElementById('maxColors').value;
+            const palette = window.app.palette.slice(0, maxColors);
+            const dither = document.getElementById('dither').checked;
+            const applyMin = document.getElementById('applyMinDetail').checked;
+
+            const mask = applyMin ?
+                HFL.applyMinDetailFilter(imageData, palette, 1.0, +document.getElementById('printW').value) :
+                null;
+
+            HFL.quantizeImage(imageData, palette, { dither, mask });
+
+            // Display result
+            const canvas = document.getElementById('quantCanvas');
+            canvas.width = imageData.width;
+            canvas.height = imageData.height;
+            const ctx = canvas.getContext('2d');
+            ctx.putImageData(imageData, 0, 0);
+
+            window.app.quantizedImage = imageData;
+
+            // Expand to layers
+            window.app.layerMaps = HFL.expandToLayers(
+                imageData,
+                window.app.sequenceMap,
+                window.app.selectedColors.length
+            );
+
+            document.getElementById('quantBox').classList.remove('hidden');
+            showMsg(3, '✓ Quantized', 'ok');
+        } catch (e) {
+            showMsg(3, `Error: ${e.message}`, 'err');
+        }
+    }, 100);
+};
+
+// Export artwork STLs
+window.exportArtworkSTLs = function() {
+    if (!window.app.layerMaps || !window.app.quantizedImage) return;
+
+    showMsg(3, 'Generating STLs...', 'info');
+
+    setTimeout(() => {
+        try {
+            const filamentNames = window.app.selectedColors.map(c => c.n);
+            const stls = HFL.exportArtworkSTLs(window.app.layerMaps, filamentNames, {
+                imageWidth: window.app.quantizedImage.width,
+                imageHeight: window.app.quantizedImage.height,
+                printWidth: +document.getElementById('printW').value,
+                layerHeight: +document.getElementById('layerH').value
+            });
+
+            Object.entries(stls).forEach(([filename, content]) => {
+                saveAs(new Blob([content], {type: 'text/plain'}), filename);
+            });
+
+            showMsg(3, `✓ Exported ${Object.keys(stls).length} STL files`, 'ok');
+        } catch (e) {
+            showMsg(3, `Error: ${e.message}`, 'err');
+        }
+    }, 100);
+};
+
+// Helper function to show messages
+function showMsg(step, text, type) {
+    const msg = document.getElementById(`msg${step}`);
+    msg.textContent = text;
+    msg.className = `msg ${type}`;
+    msg.classList.remove('hidden');
+}
+
+// Initialize
+initColorPicker();
+</script>
+</body>
+</html>
