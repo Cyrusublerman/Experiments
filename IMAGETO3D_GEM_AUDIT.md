@@ -628,9 +628,9 @@ endfacet
 │   └── EXAMPLES.md               # Code examples
 │
 ├── dist/                         # Bundled library (for CDN/external use)
-│   ├── hueforge-lite.js          # UMD bundle
-│   ├── hueforge-lite.min.js      # Minified
-│   └── hueforge-lite.d.ts        # TypeScript definitions
+│   ├── multifilament-image-print.js          # UMD bundle
+│   ├── multifilament-image-print.min.js      # Minified
+│   └── multifilament-image-print.d.ts        # TypeScript definitions
 │
 ├── svg-to-stl-reference/         # Keep as reference
 │
@@ -671,9 +671,9 @@ generateGrid(filaments, config);
 </script>
 
 <!-- Option 2: UMD Bundle (CDN) -->
-<script src="https://cdn.jsdelivr.net/gh/user/repo@main/dist/hueforge-lite.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/user/repo@main/dist/multifilament-image-print.min.js"></script>
 <script>
-const { generateGrid, quantizeImage, exportArtworkSTLs } = HueForgeLite;
+const { generateGrid, quantizeImage, exportArtworkSTLs } = Multifilament Image PrintLite;
 // Use functions
 </script>
 ```

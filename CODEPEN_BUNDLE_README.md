@@ -1,8 +1,8 @@
-# HueForge-Lite CodePen Bundle
+# Multifilament Image Print CodePen Bundle
 
 ## Overview
 
-**File:** `HueForge-CodePen-Bundle.html`
+**File:** `Multifilament-Image-Print-Bundle.html`
 **Size:** 2,211 lines (~80KB)
 **Status:** ✅ **Ready to use anywhere!**
 
@@ -88,7 +88,7 @@ This is a **single HTML file** that combines the best of both worlds:
 
 1. Go to [CodePen.io](https://codepen.io)
 2. Create new pen
-3. Open `HueForge-CodePen-Bundle.html`
+3. Open `Multifilament-Image-Print-Bundle.html`
 4. Copy **entire file contents**
 5. Paste into CodePen HTML pane
 6. Click "Run"
@@ -100,11 +100,11 @@ This is a **single HTML file** that combines the best of both worlds:
 
 ```bash
 # Just open it!
-open HueForge-CodePen-Bundle.html
+open Multifilament-Image-Print-Bundle.html
 
 # Or with a server (optional):
 python3 -m http.server 8000
-open http://localhost:8000/HueForge-CodePen-Bundle.html
+open http://localhost:8000/Multifilament-Image-Print-Bundle.html
 ```
 
 **Works either way!** No server required.
@@ -113,12 +113,12 @@ open http://localhost:8000/HueForge-CodePen-Bundle.html
 
 ```bash
 # Deploy to GitHub Pages
-git add HueForge-CodePen-Bundle.html
-git commit -m "Add HueForge bundle"
+git add Multifilament-Image-Print-Bundle.html
+git commit -m "Add Multifilament Image Print bundle"
 git push
 
 # Access at:
-https://yourusername.github.io/yourrepo/HueForge-CodePen-Bundle.html
+https://yourusername.github.io/yourrepo/Multifilament-Image-Print-Bundle.html
 ```
 
 ---
@@ -144,7 +144,7 @@ https://yourusername.github.io/yourrepo/HueForge-CodePen-Bundle.html
 ### Structure Breakdown
 
 ```
-HueForge-CodePen-Bundle.html (2,211 lines)
+Multifilament-Image-Print-Bundle.html (2,211 lines)
 │
 ├─ HEAD (14 lines)
 │  └─ CDN dependencies
@@ -204,7 +204,7 @@ HueForge-CodePen-Bundle.html (2,211 lines)
 ## Workflow Example
 
 ```
-1. Open HueForge-CodePen-Bundle.html in browser
+1. Open Multifilament-Image-Print-Bundle.html in browser
    ↓
 2. GRID TAB
    - Search "red" → Click red filament
@@ -490,9 +490,9 @@ Perfect CodePen-ready app!
 
 ---
 
-**File:** `HueForge-CodePen-Bundle.html`
+**File:** `Multifilament-Image-Print-Bundle.html`
 **Lines:** 2,211
 **Size:** 80KB
 **Status:** ✅ Production Ready
 
-Enjoy your fully-functional HueForge-Lite Studio!
+Enjoy your fully-functional Multifilament Image Print Studio!

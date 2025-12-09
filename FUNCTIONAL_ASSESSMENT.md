@@ -768,7 +768,7 @@ Best of both worlds
 3. Build script bundles library into single file:
    ```bash
    npm run build
-   # → Outputs: dist/hueforge-lite-bundle.html (single file)
+   # → Outputs: dist/multifilament-image-print-bundle.html (single file)
    ```
 
 4. Result: Single HTML file with everything inline
