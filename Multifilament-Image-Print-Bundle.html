@@ -1,0 +1,2211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multifilament Image Print Studio - CodePen Ready</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Dependencies from CDN -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/imagetracerjs@1.2.6/imagetracer_v1.2.6.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+    <style>
+        :root {
+            --bg-app: #f3f4f6; --bg-panel: #ffffff; --border: #e5e7eb;
+            --primary: #2563eb; --primary-hover: #1d4ed8;
+            --text-main: #1f2937; --text-muted: #6b7280;
+            --danger: #ef4444; --warning: #f59e0b;
+            --sidebar-w: 380px;
+        }
+
+        /* --- GLOBAL LAYOUT --- */
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: 'Space Mono', monospace; background: var(--bg-app); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-size: 12px; }
+
+        header { background: var(--bg-panel); border-bottom: 1px solid var(--border); height: 48px; display: flex; flex-shrink: 0; }
+        .tab { flex: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; border-bottom: 3px solid transparent; font-weight: 700; color: var(--text-muted); transition: all 0.2s; max-width: 150px; }
+        .tab:hover { background: #f9fafb; color: var(--text-main); }
+        .tab.active { border-bottom-color: var(--primary); color: var(--primary); background: #eff6ff; }
+
+        .workspace { display: flex; flex: 1; overflow: hidden; }
+        .sidebar { width: var(--sidebar-w); background: var(--bg-panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow-y: auto; padding: 20px; flex-shrink: 0; }
+        
+        .sidebar-section { margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 20px; }
+        .sidebar-section:last-child { border: none; padding-bottom: 0; }
+        h3 { font-size: 0.9em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 12px 0; letter-spacing: 0.05em; font-weight: 700; }
+
+        .pane-right { flex: 1; background: #e5e7eb; position: relative; display: flex; flex-direction: column; overflow: hidden; }
+        .canvas-area { flex: 1; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; background-image: radial-gradient(#cbd5e1 1px, transparent 1px); background-size: 20px 20px; }
+        .canvas-wrapper { box-shadow: 0 10px 30px rgba(0,0,0,0.1); background: white; transition: transform 0.1s linear; transform-origin: center; display:flex; align-items:center; justify-content:center;}
+
+        /* --- CONTROLS --- */
+        .form-group { margin-bottom: 12px; }
+        label { display: block; margin-bottom: 4px; font-weight: 700; font-size: 0.85em; }
+        input[type="text"], input[type="number"], select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-family: inherit; font-size: 1em; background:#fff; }
+        input[type="range"] { width: 100%; }
+        
+        .btn { display: flex; align-items: center; justify-content: center; padding: 10px; border-radius: 4px; font-weight: 700; cursor: pointer; width: 100%; border: 1px solid transparent; font-family: inherit; margin-top: 8px; font-size: 0.9em; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-secondary { background: white; border-color: var(--border); color: var(--text-main); }
+        .btn-secondary:hover { background: #f9fafb; }
+        .btn-tertiary { background: transparent; color: var(--text-muted); padding: 6px; font-size: 0.85em; margin-top:0; }
+        .btn-tertiary:hover { color: var(--text-main); text-decoration: underline; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-icon { width: 32px; height: 32px; padding: 0; background: white; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .btn-icon.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        /* --- WIDGETS --- */
+        .swatch-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; max-height: 200px; overflow-y: auto; padding:2px; margin-bottom:10px; }
+        .swatch { aspect-ratio: 1; border-radius: 3px; cursor: pointer; border: 1px solid rgba(0,0,0,0.1); position: relative; }
+        .swatch.selected { box-shadow: 0 0 0 2px var(--primary); transform: scale(0.9); z-index:2; border-color:white; }
+        
+        .selected-list { max-height: 150px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; }
+        .selected-item { display: flex; align-items: center; padding: 6px; border-bottom: 1px solid var(--border); background: #f9fafb; }
+        .selected-item:last-child { border-bottom: none; }
+        .color-chip { width: 20px; height: 20px; border-radius: 3px; margin-right: 8px; border: 1px solid #ddd; }
+
+        .z-vis-container { display: flex; align-items: flex-end; height: 100px; background: #f9fafb; border: 1px solid var(--border); padding: 10px; gap: 10px; margin-bottom: 10px; position: relative; }
+        .z-stack { width: 40px; display: flex; flex-direction: column-reverse; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
+        .z-block { width: 100%; border: 1px solid rgba(0,0,0,0.2); }
+        .z-base { background: #e5e7eb; border-top: 2px solid #9ca3af; display: flex; align-items: center; justify-content: center; font-size: 0.7em; color: #666; }
+        .z-layer { background: var(--primary); opacity: 0.8; height: 8px; margin-bottom: 1px; }
+
+        .alert-box { padding: 10px; border-radius: 4px; margin-top: 10px; font-size: 0.9em; display: flex; align-items: center; gap: 8px; }
+        .alert-error { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
+        .list-row { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 6px; background: #fff; cursor: pointer; }
+        .list-row.active { border-color: var(--primary); background: #eff6ff; }
+        .thumb { width: 32px; height: 32px; background-size: cover; background-position: center; background-color: #eee; border-radius: 2px; }
+
+        .row { display: flex; gap: 8px; }
+        .grow { flex: 1; }
+        .hidden { display: none; }
+        .overlay-icons { position: absolute; bottom: 20px; right: 20px; display: flex; gap: 8px; z-index: 10; }
+        .mode-icons { position: absolute; top: 20px; right: 20px; display: flex; gap: 8px; z-index: 10; }
+        .info-card { position: absolute; top: 20px; left: 20px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 4px; border: 1px solid #ccc; font-size: 0.85em; z-index:10; }
+        [x-cloak] { display: none !important; }
+    </style>
+<body x-data="app()" x-init="init()" x-cloak>
+
+    <header>
+        <div style="width:20px"></div>
+        <template x-for="t in tabs">
+            <div class="tab" :class="{active: activeTab === t.id}" @click="switchTab(t.id)" x-text="t.label"></div>
+        </template>
+        <div style="flex:1"></div>
+        <div class="tab" style="max-width:60px" @click="switchTab('docs')">?</div>
+    </header>
+
+    <div class="workspace">
+        
+        <div class="sidebar">
+            
+            <div x-show="activeTab === 'grid'">
+                <div class="sidebar-section">
+                    <h3>Filament Picker</h3>
+                    <div class="form-group"><input type="text" x-model="search" placeholder="Search filaments..."></div>
+                    <div class="swatch-grid">
+                        <template x-for="(f, idx) in filteredFilaments" :key="idx">
+                            <div class="swatch" :style="`background:${f.h}`" :title="f.n" :class="{selected: isSelected(f)}" @click="toggleFilament(f)"></div>
+                        </template>
+                    </div>
+                    <label>Selected (<span x-text="selectedFilaments.length"></span>)</label>
+                    <div class="selected-list">
+                        <template x-for="(f, i) in selectedFilaments" :key="i">
+                            <div class="selected-item">
+                                <div class="color-chip" :style="`background:${f.h}`"></div>
+                                <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" x-text="f.n"></div>
+                                <button style="background:none; border:none; color:red; cursor:pointer" @click="toggleFilament(f)">×</button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Constraints</h3>
+                    <div class="row">
+                        <div class="form-group grow"><label>Bed W</label><input type="number" x-model.number="config.bedW" @input="debounceGenerate"></div>
+                        <div class="form-group grow"><label>Bed H</label><input type="number" x-model.number="config.bedH" @input="debounceGenerate"></div>
+                    </div>
+                    <div class="row">
+                        <div class="form-group grow"><label>Scan W</label><input type="number" x-model.number="config.scanW" @input="debounceGenerate"></div>
+                        <div class="form-group grow"><label>Scan H</label><input type="number" x-model.number="config.scanH" @input="debounceGenerate"></div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Grid Config</h3>
+                    <div class="row">
+                        <div class="form-group grow"><label>Tile Size</label><input type="number" x-model.number="config.tileSize" @input="debounceGenerate"></div>
+                        <div class="form-group grow"><label>Gap</label><input type="number" x-model.number="config.gap" @input="debounceGenerate"></div>
+                    </div>
+                    <div class="z-vis-container">
+                        <div class="z-stack" style="height: 100%">
+                            <div class="z-block z-base" :style="`flex: 0 0 ${(config.baseLayers * config.layerH) * 20}px`">Base</div>
+                            <template x-for="i in parseInt(config.layers)">
+                                <div class="z-block z-layer" :style="`flex: 0 0 ${(config.layerH * 20)}px`"></div>
+                            </template>
+                        </div>
+                        <div style="font-size:0.8em; color:#666">
+                            Total: <strong x-text="totalHeight.toFixed(2)"></strong>mm
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="form-group grow"><label>Layers/Tile</label><input type="number" x-model.number="config.layers" min="1" @input="debounceGenerate"></div>
+                        <div class="form-group grow"><label>Layer H</label><input type="number" step="0.04" x-model.number="config.layerH"></div>
+                    </div>
+                    <div class="form-group"><label>Base Layers</label><input type="number" x-model.number="config.baseLayers"></div>
+                    
+                    <div x-show="gridStatus.error" class="alert-box alert-error">
+                        <span style="font-size:1.5em">⚠️</span>
+                        <div><strong>Error</strong><br><span x-text="gridStatus.msg"></span></div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section">
+                    <h3>Actions</h3>
+                    <button class="btn btn-primary" @click="generateGrid">Force Regenerate</button>
+                    <button class="btn btn-secondary" @click="exportGridJSON" :disabled="!gridData">Export JSON</button>
+                    <button class="btn btn-secondary" @click="exportGridImage" :disabled="!gridData">Export Image</button>
+                </div>
+            </div>
+
+            <div x-show="activeTab === 'scan'">
+                <div class="sidebar-section">
+                    <h3>Scan List</h3>
+                    <button class="btn btn-secondary" @click="$refs.scanUp.click()">+ Add Scan</button>
+                    <input type="file" x-ref="scanUp" class="hidden" accept="image/*" @change="addScan">
+                    <div style="margin-top:10px">
+                         <template x-for="(s, i) in scans"><div class="list-row" @click="activeScanIdx=i" :class="{active:activeScanIdx===i}">
+                             <div class="thumb" :style="`background-image:url(${s.url})`"></div>
+                             <span x-text="s.name"></span>
+                         </div></template>
+                    </div>
+                </div>
+                <div class="sidebar-section" x-show="scans.length">
+                    <h3>Alignment</h3>
+                    <div class="row"><div class="form-group grow"><label>Off X</label><input type="number" x-model.number="scans[activeScanIdx].offX" @input="drawScan"></div><div class="form-group grow"><label>Off Y</label><input type="number" x-model.number="scans[activeScanIdx].offY" @input="drawScan"></div></div>
+                    <div class="row"><div class="form-group grow"><label>Scale X</label><input type="number" step="0.01" x-model.number="scans[activeScanIdx].scaleX" @input="drawScan"></div><div class="form-group grow"><label>Scale Y</label><input type="number" step="0.01" x-model.number="scans[activeScanIdx].scaleY" @input="drawScan"></div></div>
+                    <button class="btn btn-secondary" @click="autoAlign">Auto-Align A4</button>
+                </div>
+                <div class="sidebar-section" x-show="scans.length">
+                    <h3>Analysis</h3>
+                    <button class="btn btn-primary" @click="analyzeScan">Extract Colors</button>
+                </div>
+            </div>
+
+            <div x-show="activeTab === 'process'">
+                <div class="sidebar-section">
+                    <h3>Input</h3>
+                    <button class="btn btn-secondary" @click="$refs.imgUp.click()">Upload Image</button>
+                    <input type="file" x-ref="imgUp" class="hidden" accept="image/*" @change="loadProcessImage">
+                    <div class="form-group" style="margin-top:10px">
+                        <label>Mode</label>
+                        <div class="row">
+                            <label style="font-weight:400"><input type="radio" name="mode" value="raster" x-model="procMode"> Raster</label>
+                            <label style="font-weight:400"><input type="radio" name="mode" value="vector" x-model="procMode"> Vector</label>
+                        </div>
+                    </div>
+                </div>
+                <div x-show="procMode === 'raster'">
+                    <div class="sidebar-section">
+                        <h3>Raster Config</h3>
+                        <div class="form-group"><label>Colors</label><input type="number" x-model.number="raster.maxColors" min="2"></div>
+                        <div class="form-group"><label>Noise</label><input type="range" x-model.number="raster.noise" min="0" max="50"></div>
+                        <div class="form-group"><label>Dither</label><select x-model="raster.dither"><option value="none">None</option><option value="floyd">Floyd-Steinberg</option></select></div>
+                    </div>
+                    <div class="sidebar-section"><button class="btn btn-primary" @click="processRaster" :disabled="!procImg">Quantize</button></div>
+                </div>
+                <div x-show="procMode === 'vector'">
+                    <div class="sidebar-section">
+                        <h3>Vector Config</h3>
+                        <div class="form-group"><label>Simplify</label><input type="range" step="0.1" min="0" max="10" x-model.number="vector.simplify"></div>
+                        <div class="form-group"><label>Colors</label><input type="number" x-model.number="vector.colors" min="2"></div>
+                    </div>
+                    <div class="sidebar-section"><button class="btn btn-primary" @click="processVector" :disabled="!procImg">Trace SVG</button></div>
+                </div>
+            </div>
+
+            <div x-show="activeTab === 'model'">
+                <div class="sidebar-section">
+                    <h3>Source</h3>
+                    <div class="form-group"><label style="font-weight:400"><input type="radio" name="msrc" value="raster" x-model="model.source"> Raster Output</label></div>
+                </div>
+                <div class="sidebar-section">
+                    <h3>Geometry</h3>
+                    <div class="form-group"><label>Min Height</label><input type="number" step="0.1" x-model.number="model.minH"></div>
+                    <div class="form-group"><label>Max Height</label><input type="number" step="0.1" x-model.number="model.maxH"></div>
+                    <div class="form-group"><label><input type="checkbox" x-model="model.smoothing"> Smoothing</label></div>
+                </div>
+                <div class="sidebar-section"><button class="btn btn-primary" @click="generateModel">Generate Mesh</button></div>
+            </div>
+
+            <div x-show="activeTab === 'export'">
+                <div class="sidebar-section">
+                    <h3>Export</h3>
+                    <div class="form-group"><label><input type="checkbox" checked disabled> Binary STL</label></div>
+                    <div class="form-group"><label><input type="checkbox" x-model="exportOpts.palette"> Palette JSON</label></div>
+                    <button class="btn btn-primary" @click="runExport" :disabled="!meshReady">Download STL</button>
+                </div>
+            </div>
+            
+            <div x-show="activeTab === 'docs'">
+                <div class="sidebar-section">
+                    <h3>Help</h3>
+                    <button class="btn btn-tertiary" onclick="document.getElementById('d1').scrollIntoView()">Grid</button>
+                    <button class="btn btn-tertiary" onclick="document.getElementById('d2').scrollIntoView()">Scan</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="pane-right" x-ref="viewport" @mousedown="startDrag" @mousemove="doDrag" @mouseup="endDrag" @wheel.prevent="doZoom">
+            
+            <div x-show="activeTab === 'docs'" class="canvas-area" style="display:block; overflow-y:auto; padding:40px; background:white; cursor:auto" @mousedown.stop>
+                <h1>Documentation</h1>
+                <section id="d1"><h2>Grid</h2><p>Select filaments, check dimensions, generate grid.</p></section>
+                <section id="d2"><h2>Scan</h2><p>Upload scan, align grid, extract colors.</p></section>
+            </div>
+
+            <div x-show="activeTab !== 'docs'" class="canvas-area">
+                <div class="canvas-wrapper" :style="`transform: translate(${view.x}px, ${view.y}px) scale(${view.scale})`">
+                    
+                    <canvas x-ref="gridCanvas" x-show="activeTab === 'grid'"></canvas>
+                    <canvas x-ref="scanCanvas" x-show="activeTab === 'scan'"></canvas>
+                    
+                    <canvas x-ref="procCanvas" x-show="activeTab === 'process' && procMode === 'raster'"></canvas>
+                    <div x-ref="svgCont" x-show="activeTab === 'process' && procMode === 'vector'" style="width:500px; height:500px; background:white; display:flex;"></div>
+                    
+                    <div x-ref="threeCont" x-show="activeTab === 'model'" style="width:800px; height:600px; background:#222"></div>
+                </div>
+            </div>
+
+            <div class="info-card" x-show="activeTab === 'grid' && gridData">
+                <div style="font-weight:700; border-bottom:1px solid #ccc">Metrics</div>
+                <div>Seqs: <span x-text="gridData.seqs.length"></span></div>
+                <div>Size: <span x-text="`${gridData.width.toFixed(1)}x${gridData.height.toFixed(1)}mm`"></span></div>
+            </div>
+
+            <div class="mode-icons" x-show="activeTab === 'process'">
+                <button class="btn-icon" :class="{active: procView === 'orig'}" @click="toggleProcView('orig')">O</button>
+                <button class="btn-icon" :class="{active: procView === 'res'}" @click="toggleProcView('res')">R</button>
+            </div>
+
+            <div class="overlay-icons" x-show="activeTab !== 'docs'">
+                <button class="btn-icon" @click="zoom(0.1)">+</button>
+                <button class="btn-icon" @click="zoom(-0.1)">-</button>
+                <button class="btn-icon" @click="resetView">R</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== MULTIFILAMENT IMAGE PRINT LIBRARY (Correct Algorithms Inline) =====
+/**
+ * Constants Module
+ * Contains color palette and default configuration values
+ */
+
+const COLOURS = [
+    {h:"#FF7746",n:"Orange HF PETG"},{h:"#FFCE26",n:"Translucent Orange"},{h:"#FFFFFF",n:"White PETG"},
+    {h:"#CC3F45",n:"Red PLA/PETG"},{h:"#A3A6AA",n:"HF Grey PETG"},{h:"#4FC359",n:"Alpine Green Sparkle"},
+    {h:"#0AC789",n:"Basic Transparent PETG"},{h:"#56A4AD",n:"Dark Green PLA Matte"},{h:"#616364",n:"Matte Charcoal Grey PLA"},
+    {h:"#3F9CCC",n:"Blue Silk PLA"},{h:"#BC9091",n:"Grey TPU/TPE"},{h:"#F0FEF3",n:"White TPU/TPE"},
+    {h:"#6479B8",n:"Blue Grey PLA"},{h:"#F0D0DC",n:"Pink PETG CF"},{h:"#931010",n:"Dark Red TPU/TPE"},
+    {h:"#4C484A",n:"Black PA6GF CF"},{h:"#966451",n:"Trim Grey Metallic PLA"},{h:"#FFE825",n:"Sunflower Yellow PLA"},
+    {h:"#F4AFF3",n:"Merlot Plum PLA"},{h:"#6565F2",n:"Purple PLA"},{h:"#5A7BC0",n:"Metallic Cobalt Blue PLA"},
+    {h:"#4F9756",n:"Neptune PLA Galaxy"},{h:"#76654F",n:"Grass Green PLA"},{h:"#FC9257",n:"Mandarin Orange PLA"},
+    {h:"#EF9CA1",n:"Pink PLA"},{h:"#4C5752",n:"Purple Galaxy PLA"},{h:"#FF9399",n:"Light Grey CF PLA"},
+    {h:"#4C9BF6",n:"Gold Metallic PLA"},{h:"#EEC4C1",n:"Pink Silk PLA"},{h:"#932DA1",n:"Marine Blue PLA"},
+    {h:"#954D3F",n:"Marble Red PLA"},{h:"#B67254",n:"Bronze PLA"},{h:"#607745",n:"Olive Green PLA"},
+    {h:"#3DCE59",n:"Alpine Green PLA"},{h:"#2E7799",n:"Medullosa Green PLA"},{h:"#B35C3F",n:"Crimson Red Sparkle PLA"},
+    {h:"#BB7398",n:"Purple Grey PLA"},{h:"#A0B499",n:"Anti-Grey PLA"},{h:"#A7A344",n:"Chartreuse PLA"},
+    {h:"#6D9553",n:"Green PLA"},{h:"#FECADE",n:"White Jade PLA"},{h:"#C13C40",n:"Red PLA"},
+    {h:"#00B8DC",n:"Cyan PLA"},{h:"#C25498",n:"Magenta PLA"},{h:"#FED003",n:"Yellow PLA"},
+    {h:"#09A4CE",n:"Sky Blue PLA"},{h:"#939393",n:"Grey PLA"},{h:"#444443",n:"Black PETG"},
+    {h:"#60AF73",n:"Violet Purple PETG"},{h:"#2B8F98",n:"Teal PLA"},{h:"#BB7935",n:"Copper Silk PLA"},
+    {h:"#EDCE1A",n:"Gold Silk PLA"},{h:"#F9D7E1",n:"Pale Pink PLA"},{h:"#D346A1",n:"Hot Pink PLA"},
+    {h:"#787899",n:"Lilac Purple PLA"},{h:"#FCFB96",n:"Pale Yellow PLA"},{h:"#FFC968",n:"Golden Yellow PLA"},
+    {h:"#B3CF3F",n:"Lime Green Metallic PLA"},{h:"#FDF192",n:"Lemon Yellow Silk PLA"},{h:"#D34651",n:"Scarlet Red Silk PLA"},
+    {h:"#B09A5E",n:"Tan TPU/TPE"},{h:"#999564",n:"Olive Grey PLA"},{h:"#999939",n:"Dark Olive PLACF PLA"},
+    {h:"#0DA553",n:"Forest Green PLA"},{h:"#B57B5E",n:"Bronze Silk PLA"},{h:"#09CD04",n:"Silver Metallic Silk PLA"},
+    {h:"#0FD7E1",n:"Ice Blue PLA"},{h:"#9589BC",n:"Lavender Purple PLA"},{h:"#00A4CE",n:"Bright Cyan PLA"},
+    {h:"#00A553",n:"Bambu Green PLA"},{h:"#404D3C",n:"Forest Black PLA"},{h:"#FF6B9D",n:"Hot Magenta PLA"},
+    {h:"#8B4513",n:"Saddle Brown PLA"},{h:"#FFD700",n:"Gold PLA"}
+];
+
+// Default configuration values
+const DEFAULTS = {
+    bedW: 256,
+    bedH: 256,
+    scanW: 210,  // A4 width
+    scanH: 297,  // A4 height
+    tileSize: 10,
+    gap: 1,
+    layers: 4,
+    layerH: 0.08,
+    baseLayers: 3,
+    printW: 170,
+    maxColours: 4,
+    minDetail: 1.0
+};
+/**
+ * Utility Functions Module
+ * Contains helper functions used throughout the application
+ */
+
+/**
+ * CRITICAL: RGB Key Standardization
+ * Always round RGB values to integers for consistent Map key lookups
+ * @param {Object} rgb - Object with r, g, b properties
+ * @returns {string} Standardized key in format "r,g,b"
+ */
+function rgb_to_key(rgb) {
+    const r = Math.round(rgb.r);
+    const g = Math.round(rgb.g);
+    const b = Math.round(rgb.b);
+    return `${r},${g},${b}`;
+}
+
+/**
+ * Convert hex color to RGB object
+ * @param {string} hex - Hex color string (#RRGGBB)
+ * @returns {Object} RGB object {r, g, b}
+ */
+function hex2rgb(hex) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return m ? {
+        r: parseInt(m[1], 16),
+        g: parseInt(m[2], 16),
+        b: parseInt(m[3], 16)
+    } : {r: 255, g: 255, b: 255};
+}
+
+/**
+ * Convert RGB object to hex string
+ * @param {Object} rgb - RGB object {r, g, b}
+ * @returns {string} Hex color string
+ */
+function rgb2hex(rgb) {
+    const r = Math.round(rgb.r).toString(16).padStart(2, '0');
+    const g = Math.round(rgb.g).toString(16).padStart(2, '0');
+    const b = Math.round(rgb.b).toString(16).padStart(2, '0');
+    return `#${r}${g}${b}`;
+}
+
+/**
+ * Simulate the final color from a layer sequence
+ * Color mixing formula: average of all non-empty layers
+ * @param {Array} seq - Layer sequence array
+ * @param {Array} colours - Array of color objects with .h (hex) property
+ * @returns {Object} RGB object {r, g, b}
+ */
+function simColour(seq, colours) {
+    let r = 0, g = 0, b = 0, cnt = 0;
+    for (let i = 0; i < seq.length; i++) {
+        const fi = seq[i];
+        if (fi > 0) {
+            const rgb = hex2rgb(colours[fi - 1].h);
+            r += rgb.r;
+            g += rgb.g;
+            b += rgb.b;
+            cnt++;
+        }
+    }
+    return cnt === 0 ? {r: 255, g: 255, b: 255} : {
+        r: Math.round(r / cnt),
+        g: Math.round(g / cnt),
+        b: Math.round(b / cnt)
+    };
+}
+
+/**
+ * Calculate Euclidean distance between two colors
+ * @param {Object} c1 - RGB color 1
+ * @param {Object} c2 - RGB color 2
+ * @returns {number} Distance value
+ */
+function colorDistance(c1, c2) {
+    return Math.sqrt(
+        (c1.r - c2.r) ** 2 +
+        (c1.g - c2.g) ** 2 +
+        (c1.b - c2.b) ** 2
+    );
+}
+
+/**
+ * Find the closest color in a palette to a given color
+ * @param {Object} c - RGB color to match
+ * @param {Array} palette - Array of RGB colors
+ * @returns {Object} Closest RGB color from palette
+ */
+function findClosest(c, palette) {
+    let min = Infinity;
+    let closest = palette[0];
+    palette.forEach(p => {
+        const dist = colorDistance(c, p);
+        if (dist < min) {
+            min = dist;
+            closest = p;
+        }
+    });
+    return closest;
+}
+
+/**
+ * Calculate average color from image data
+ * @param {ImageData} imgData - Image data to analyze
+ * @returns {Object} RGB object {r, g, b}
+ */
+function avgColour(imgData) {
+    let r = 0, g = 0, b = 0, cnt = 0;
+    for (let i = 0; i < imgData.data.length; i += 4) {
+        r += imgData.data[i];
+        g += imgData.data[i + 1];
+        b += imgData.data[i + 2];
+        cnt++;
+    }
+    return {
+        r: Math.round(r / cnt),
+        g: Math.round(g / cnt),
+        b: Math.round(b / cnt)
+    };
+}
+
+/**
+ * Distribute dithering error to neighboring pixels (Floyd-Steinberg)
+ * @param {Uint8ClampedArray} data - Image data
+ * @param {number} w - Image width
+ * @param {number} h - Image height
+ * @param {number} x - Current x position
+ * @param {number} y - Current y position
+ * @param {number} er - Red error
+ * @param {number} eg - Green error
+ * @param {number} eb - Blue error
+ */
+function distributeError(data, w, h, x, y, er, eg, eb) {
+    const offsets = [
+        {dx: 1, dy: 0, f: 7/16},  // Right
+        {dx: -1, dy: 1, f: 3/16}, // Bottom-left
+        {dx: 0, dy: 1, f: 5/16},  // Bottom
+        {dx: 1, dy: 1, f: 1/16}   // Bottom-right
+    ];
+    offsets.forEach(({dx, dy, f}) => {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+            const i = (ny * w + nx) * 4;
+            data[i] = Math.max(0, Math.min(255, data[i] + er * f));
+            data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + eg * f));
+            data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + eb * f));
+        }
+    });
+}
+
+/**
+ * Parse GPL (GIMP Palette) file format
+ * @param {string} text - GPL file contents
+ * @returns {Array} Array of RGB objects
+ */
+function parseGPL(text) {
+    const lines = text.split('\n');
+    const palette = [];
+
+    for (let line of lines) {
+        line = line.trim();
+
+        // Skip comments, headers, empty lines
+        if (!line || line.startsWith('#') ||
+            line.startsWith('GIMP') ||
+            line.startsWith('Name:') ||
+            line.startsWith('Columns:')) {
+            continue;
+        }
+
+        // Parse RGB values (format: "R G B [Name]")
+        const parts = line.split(/\s+/);
+
+        if (parts.length >= 3) {
+            const r = parseInt(parts[0]);
+            const g = parseInt(parts[1]);
+            const b = parseInt(parts[2]);
+
+            // Validate RGB values
+            if (r >= 0 && r <= 255 &&
+                g >= 0 && g <= 255 &&
+                b >= 0 && b <= 255) {
+                palette.push({r, g, b});
+            }
+        }
+    }
+
+    return palette;
+}
+
+/**
+ * Generate GPL (GIMP Palette) file content
+ * @param {Array} palette - Array of RGB objects
+ * @param {string} name - Palette name
+ * @returns {string} GPL file content
+ */
+function generateGPL(palette, name = 'Palette') {
+    let gpl = `GIMP Palette\nName: ${name}\nColumns: 8\n#\n`;
+    palette.forEach((c, i) => {
+        gpl += `${Math.round(c.r)} ${Math.round(c.g)} ${Math.round(c.b)} Color${i}\n`;
+    });
+    return gpl;
+}
+
+/**
+ * Clamp value between min and max
+ * @param {number} val - Value to clamp
+ * @param {number} min - Minimum value
+ * @param {number} max - Maximum value
+ * @returns {number} Clamped value
+ */
+function clamp(val, min, max) {
+    return Math.max(min, Math.min(max, val));
+}
+/**
+ * State Management Module
+ * Provides state factory functions and validators
+ */
+
+/**
+ * Create initial grid state
+ * @returns {Object|null} Grid state object
+ */
+function createGridState() {
+    return null;
+}
+
+/**
+ * Create initial scan state
+ * @returns {Object|null} Scan state object
+ */
+function createScanState() {
+    return {
+        img: null,
+        alignment: {
+            offsetX: 0,
+            offsetY: 0,
+            scaleX: 1,
+            scaleY: 1
+        }
+    };
+}
+
+/**
+ * Create initial quantize state
+ * @returns {Object|null} Quantize state object
+ */
+function createQuantizeState() {
+    return {
+        img: null,
+        result: null,
+        width: 0,
+        height: 0
+    };
+}
+
+/**
+ * Create sequence map (RGB key -> sequence data)
+ * @returns {Map} Sequence map
+ */
+function createSequenceMap() {
+    return new Map();
+}
+
+/**
+ * Create palette from colors
+ * @param {Array} colors - Array of RGB objects
+ * @returns {Array} Palette array
+ */
+function createPalette(colors) {
+    return colors || [];
+}
+/**
+ * Sequence Generation Module
+ * Generates valid layer sequences for multi-color printing
+ */
+
+
+/**
+ * Generate all possible layer sequences for N colours and M layers
+ * CRITICAL: Only generates VALID sequences (no gaps)
+ *
+ * A sequence is valid if:
+ * 1. Not all zeros (empty sequence)
+ * 2. No gaps (no non-zero values after zeros)
+ *
+ * Examples:
+ * - Valid: [1, 2, 0, 0], [1, 1, 1, 1], [2, 3, 0, 0]
+ * - Invalid: [0, 0, 0, 0], [1, 0, 2, 0], [0, 1, 2, 3]
+ *
+ * @param {number} N - Number of colours/filaments
+ * @param {number} M - Number of layers per tile
+ * @returns {Array} Array of valid sequences
+ */
+function generateSequences(N, M) {
+    const seqs = [];
+
+    /**
+     * Check if a sequence is valid
+     * @param {Array} s - Sequence to validate
+     * @returns {boolean} True if valid
+     */
+    function isValid(s) {
+        // Reject all-empty sequences
+        if (s.every(v => v === 0)) return false;
+
+        // Reject sequences with gaps (non-zero after zero)
+        let seenZero = false;
+        for (let v of s) {
+            if (v === 0) {
+                seenZero = true;
+            } else if (seenZero) {
+                return false; // Gap detected!
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Recursive sequence generator
+     * @param {Array} cur - Current sequence being built
+     * @param {number} d - Current depth (layer index)
+     */
+    function gen(cur, d) {
+        if (d === M) {
+            if (isValid(cur)) {
+                seqs.push([...cur]);
+            }
+            return;
+        }
+
+        // CRITICAL: Once we hit zero, only allow zeros
+        if (cur.length > 0 && cur[cur.length - 1] === 0) {
+            gen([...cur, 0], d + 1);
+        } else {
+            // Can use any filament (1 to N) or empty (0)
+            for (let v = 0; v <= N; v++) {
+                gen([...cur, v], d + 1);
+            }
+        }
+    }
+
+    gen([], 0);
+    return seqs;
+}
+
+/**
+ * Build sequence map (RGB color -> sequence data)
+ * This map is CRITICAL for the entire workflow - it allows
+ * us to look up the layer sequence for any color in the final image
+ *
+ * @param {Array} sequences - Array of sequences
+ * @param {Array} colours - Array of color objects {h, n}
+ * @param {number} cols - Grid columns (for position calculation)
+ * @returns {Map} Map from RGB key to sequence data
+ */
+function buildSequenceMap(sequences, colours, cols) {
+    const map = new Map();
+
+    sequences.forEach((seq, idx) => {
+        // Calculate what color this sequence produces
+        const colour = simColour(seq, colours);
+        const key = rgb_to_key(colour);
+
+        // Store sequence with metadata
+        map.set(key, {
+            sequence: seq,
+            colours: colours,
+            grid_position: {
+                row: Math.floor(idx / cols),
+                col: idx % cols,
+                index: idx
+            }
+        });
+    });
+
+    return map;
+}
+
+/**
+ * Calculate theoretical number of sequences
+ * Formula: N × (N^M - 1) / (N - 1)
+ *
+ * @param {number} N - Number of colours
+ * @param {number} M - Number of layers
+ * @returns {number} Expected sequence count
+ */
+function calculateSequenceCount(N, M) {
+    if (N === 1) return M; // Special case
+    return N * (Math.pow(N, M) - 1) / (N - 1);
+}
+/**
+ * Grid Layout Module
+ * Calculates optimal grid dimensions and arrangement
+ */
+
+/**
+ * Calculate grid layout to fit sequences within constraints
+ *
+ * @param {Object} params - Layout parameters
+ * @param {number} params.sequenceCount - Number of sequences to fit
+ * @param {number} params.tileSize - Size of each tile in mm
+ * @param {number} params.gap - Gap between tiles in mm
+ * @param {number} params.maxWidth - Maximum width constraint in mm
+ * @param {number} params.maxHeight - Maximum height constraint in mm
+ * @returns {Object} Layout result {rows, cols, width, height, emptyCells, fits, error}
+ */
+function calculateGridLayout({
+    sequenceCount,
+    tileSize,
+    gap,
+    maxWidth,
+    maxHeight
+}) {
+    const step = tileSize + gap;
+    const tilesPerRow = Math.floor((maxWidth + gap) / step);
+    const tilesPerCol = Math.floor((maxHeight + gap) / step);
+    const maxTiles = tilesPerRow * tilesPerCol;
+
+    // Check if sequences fit at all
+    if (sequenceCount > maxTiles) {
+        return {
+            rows: 0,
+            cols: 0,
+            width: 0,
+            height: 0,
+            emptyCells: [],
+            fits: false,
+            error: `${sequenceCount} sequences won't fit in ${maxWidth}×${maxHeight}mm (max ${maxTiles} tiles)`
+        };
+    }
+
+    // Start with square-ish layout
+    let cols = Math.ceil(Math.sqrt(sequenceCount));
+    let rows = Math.ceil(sequenceCount / cols);
+
+    // Adjust to fit constraints
+    while (cols > tilesPerRow || rows > tilesPerCol) {
+        if (cols > tilesPerRow) {
+            rows++;
+            cols = Math.ceil(sequenceCount / rows);
+        } else {
+            cols++;
+            rows = Math.ceil(sequenceCount / cols);
+        }
+        if (rows * cols > maxTiles) {
+            return {
+                rows: 0,
+                cols: 0,
+                width: 0,
+                height: 0,
+                emptyCells: [],
+                fits: false,
+                error: 'Cannot fit within constraints'
+            };
+        }
+    }
+
+    // Calculate empty cells
+    const totalCells = rows * cols;
+    const emptyCells = [];
+    for (let i = sequenceCount; i < totalCells; i++) {
+        emptyCells.push(i);
+    }
+
+    // Calculate physical dimensions
+    const width = cols * step - gap;
+    const height = rows * step - gap;
+
+    return {
+        rows,
+        cols,
+        width,
+        height,
+        emptyCells,
+        fits: true,
+        error: null
+    };
+}
+
+/**
+ * Calculate print bed constraints
+ * Uses minimum of bed size and scan size
+ *
+ * @param {Object} params - Constraint parameters
+ * @param {number} params.bedW - Bed width in mm
+ * @param {number} params.bedH - Bed height in mm
+ * @param {number} params.scanW - Scan width in mm
+ * @param {number} params.scanH - Scan height in mm
+ * @returns {Object} {maxWidth, maxHeight}
+ */
+function calculateConstraints({ bedW, bedH, scanW, scanH }) {
+    return {
+        maxWidth: Math.min(bedW, scanW),
+        maxHeight: Math.min(bedH, scanH)
+    };
+}
+/**
+ * Grid Visualization Module
+ * Handles canvas rendering of calibration grid
+ */
+
+
+/**
+ * Draw calibration grid on canvas
+ *
+ * @param {HTMLCanvasElement} canvas - Canvas element to draw on
+ * @param {Object} gridData - Grid data object
+ * @param {Object} options - Drawing options
+ * @param {number} options.scale - Scale factor for grid size
+ * @param {number} options.cellSize - Size of each cell in pixels (auto-calculated if not provided)
+ * @returns {Object} Drawing metadata
+ */
+function drawGrid(canvas, gridData, options = {}) {
+    const ctx = canvas.getContext('2d');
+    const { rows, cols, sequences, colours, emptyCells } = gridData;
+    const scale = options.scale || 1;
+
+    // Calculate cell size
+    const cellSize = options.cellSize || Math.min(
+        canvas.width / cols,
+        canvas.height / rows
+    ) * scale;
+
+    // Set canvas dimensions
+    canvas.width = cols * cellSize;
+    canvas.height = rows * cellSize;
+
+    // Clear canvas
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw filled cells
+    sequences.forEach((seq, i) => {
+        if (i >= rows * cols) return;
+
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+        const x = col * cellSize;
+        const y = row * cellSize;
+
+        // Calculate and draw tile color
+        const colour = simColour(seq, colours);
+        ctx.fillStyle = `rgb(${colour.r},${colour.g},${colour.b})`;
+        ctx.fillRect(x, y, cellSize, cellSize);
+
+        // Draw border (darker to reduce bevel effect)
+        ctx.strokeStyle = '#666';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, cellSize, cellSize);
+    });
+
+    // Draw empty cells
+    if (emptyCells && emptyCells.length > 0) {
+        emptyCells.forEach(emptyIdx => {
+            const row = Math.floor(emptyIdx / cols);
+            const col = emptyIdx % cols;
+            const x = col * cellSize;
+            const y = row * cellSize;
+
+            // Grey background
+            ctx.fillStyle = '#f5f5f5';
+            ctx.fillRect(x, y, cellSize, cellSize);
+
+            // Grey border
+            ctx.strokeStyle = '#ccc';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, cellSize, cellSize);
+
+            // Draw X
+            ctx.strokeStyle = '#999';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x + 5, y + 5);
+            ctx.lineTo(x + cellSize - 5, y + cellSize - 5);
+            ctx.moveTo(x + cellSize - 5, y + 5);
+            ctx.lineTo(x + 5, y + cellSize - 5);
+            ctx.stroke();
+        });
+    }
+
+    return {
+        cellSize,
+        width: canvas.width,
+        height: canvas.height
+    };
+}
+
+/**
+ * Get grid cell at canvas coordinates
+ *
+ * @param {Object} gridData - Grid data
+ * @param {number} canvasX - X coordinate on canvas
+ * @param {number} canvasY - Y coordinate on canvas
+ * @param {number} cellSize - Size of each cell in pixels
+ * @returns {Object|null} {row, col, index, sequence} or null if out of bounds
+ */
+function getCellAtPosition(gridData, canvasX, canvasY, cellSize) {
+    const { rows, cols, sequences, emptyCells } = gridData;
+
+    const col = Math.floor(canvasX / cellSize);
+    const row = Math.floor(canvasY / cellSize);
+
+    // Check bounds
+    if (col < 0 || col >= cols || row < 0 || row >= rows) {
+        return null;
+    }
+
+    const index = row * cols + col;
+
+    // Check if empty cell
+    if (emptyCells && emptyCells.includes(index)) {
+        return {
+            row,
+            col,
+            index,
+            sequence: null,
+            isEmpty: true
+        };
+    }
+
+    // Check if valid sequence
+    if (index >= sequences.length) {
+        return null;
+    }
+
+    return {
+        row,
+        col,
+        index,
+        sequence: sequences[index],
+        isEmpty: false
+    };
+}
+
+/**
+ * Draw sequence details for popup display
+ *
+ * @param {HTMLCanvasElement} canvas - Canvas for drawing
+ * @param {Array} sequence - Layer sequence
+ * @param {Array} colours - Color objects
+ * @param {number} layerHeight - Height in mm per layer
+ * @returns {Object} Details for display
+ */
+function renderSequenceDetails(canvas, sequence, colours, layerHeight) {
+    const ctx = canvas.getContext('2d');
+    const width = 200;
+    const layerH = 30;
+    const height = sequence.length * layerH + 40;
+
+    canvas.width = width;
+    canvas.height = height;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+
+    // Draw title
+    ctx.fillStyle = '#000000';
+    ctx.font = '14px monospace';
+    ctx.fillText(`Sequence: [${sequence.join(', ')}]`, 10, 20);
+
+    // Draw layers from bottom to top
+    let currentZ = 0;
+    sequence.forEach((filIdx, layerIdx) => {
+        const y = height - (layerIdx + 1) * layerH - 10;
+
+        if (filIdx === 0) {
+            // Empty layer
+            ctx.fillStyle = '#eeeeee';
+            ctx.fillRect(10, y, width - 20, layerH - 2);
+            ctx.strokeStyle = '#999999';
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(10, y, width - 20, layerH - 2);
+            ctx.setLineDash([]);
+
+            ctx.fillStyle = '#666666';
+            ctx.font = '12px monospace';
+            ctx.fillText(`Layer ${layerIdx}: Empty`, 15, y + 18);
+        } else {
+            // Filled layer
+            const colour = colours[filIdx - 1];
+            ctx.fillStyle = colour.h;
+            ctx.fillRect(10, y, width - 20, layerH - 2);
+            ctx.strokeStyle = '#333333';
+            ctx.strokeRect(10, y, width - 20, layerH - 2);
+
+            ctx.fillStyle = '#000000';
+            ctx.font = '10px monospace';
+            ctx.fillText(`L${layerIdx}: ${colour.n.substring(0, 20)}`, 15, y + 18);
+        }
+
+        currentZ += layerHeight;
+    });
+
+    return {
+        totalHeight: currentZ,
+        layerCount: sequence.filter(v => v > 0).length
+    };
+}
+/**
+ * Grid Export Module
+ * Handles exporting calibration grid as STL and JSON
+ */
+
+
+/**
+ * Generate STL box geometry (12 triangular facets)
+ * @param {number} x0 - Min X
+ * @param {number} y0 - Min Y
+ * @param {number} z0 - Min Z
+ * @param {number} x1 - Max X
+ * @param {number} y1 - Max Y
+ * @param {number} z1 - Max Z
+ * @returns {string} STL facets
+ */
+function generateBox(x0, y0, z0, x1, y1, z1) {
+    return `facet normal 0 0 -1
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x1} ${y0} ${z0}
+    vertex ${x1} ${y1} ${z0}
+  endloop
+endfacet
+facet normal 0 0 -1
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x1} ${y1} ${z0}
+    vertex ${x0} ${y1} ${z0}
+  endloop
+endfacet
+facet normal 0 0 1
+  outer loop
+    vertex ${x0} ${y0} ${z1}
+    vertex ${x1} ${y1} ${z1}
+    vertex ${x1} ${y0} ${z1}
+  endloop
+endfacet
+facet normal 0 0 1
+  outer loop
+    vertex ${x0} ${y0} ${z1}
+    vertex ${x0} ${y1} ${z1}
+    vertex ${x1} ${y1} ${z1}
+  endloop
+endfacet
+facet normal 0 -1 0
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x1} ${y0} ${z0}
+    vertex ${x1} ${y0} ${z1}
+  endloop
+endfacet
+facet normal 0 -1 0
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x1} ${y0} ${z1}
+    vertex ${x0} ${y0} ${z1}
+  endloop
+endfacet
+facet normal 0 1 0
+  outer loop
+    vertex ${x0} ${y1} ${z0}
+    vertex ${x1} ${y1} ${z1}
+    vertex ${x1} ${y1} ${z0}
+  endloop
+endfacet
+facet normal 0 1 0
+  outer loop
+    vertex ${x0} ${y1} ${z0}
+    vertex ${x0} ${y1} ${z1}
+    vertex ${x1} ${y1} ${z1}
+  endloop
+endfacet
+facet normal -1 0 0
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x0} ${y1} ${z1}
+    vertex ${x0} ${y1} ${z0}
+  endloop
+endfacet
+facet normal -1 0 0
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x0} ${y0} ${z1}
+    vertex ${x0} ${y1} ${z1}
+  endloop
+endfacet
+facet normal 1 0 0
+  outer loop
+    vertex ${x1} ${y0} ${z0}
+    vertex ${x1} ${y1} ${z0}
+    vertex ${x1} ${y1} ${z1}
+  endloop
+endfacet
+facet normal 1 0 0
+  outer loop
+    vertex ${x1} ${y0} ${z0}
+    vertex ${x1} ${y1} ${z1}
+    vertex ${x1} ${y0} ${z1}
+  endloop
+endfacet
+`;
+}
+
+/**
+ * Wrap STL facets with header/footer
+ * @param {string} facets - STL facet data
+ * @param {string} name - Object name
+ * @returns {string} Complete STL file content
+ */
+function wrapSTL(facets, name) {
+    return `solid ${name}\n${facets}endsolid ${name}\n`;
+}
+
+/**
+ * Export calibration grid as STL files
+ * Generates one STL per filament (all layers combined) plus base layer
+ *
+ * @param {Object} gridData - Grid data object
+ * @param {Object} config - Export configuration
+ * @param {number} config.layerHeight - Height of each layer in mm
+ * @param {number} config.baseLayers - Number of base layers
+ * @param {number} config.baseColorIndex - Base color index (-1 for white/default)
+ * @returns {Object} Map of filename -> STL content
+ */
+function exportGridSTLs(gridData, config) {
+    const { sequences, colours, rows, cols, tileSize, gap } = gridData;
+    const { layerHeight, baseLayers, baseColorIndex } = config;
+    const stls = {};
+
+    // Generate base layer
+    if (baseLayers > 0) {
+        let baseFacets = '';
+        for (let l = 0; l < baseLayers; l++) {
+            baseFacets += generateBox(
+                0, 0, l * layerHeight,
+                gridData.width, gridData.height, (l + 1) * layerHeight
+            );
+        }
+        const baseName = baseColorIndex === -1 ? 'base_white' : `base_color_${baseColorIndex}`;
+        stls[`${baseName}.stl`] = wrapSTL(baseFacets, 'Base');
+    }
+
+    // Generate filament layers
+    const filamentFacets = Array(colours.length).fill('');
+
+    sequences.forEach((seq, i) => {
+        if (i >= rows * cols) return;
+
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+        const x0 = col * (tileSize + gap);
+        const y0 = row * (tileSize + gap);
+        let z = baseLayers * layerHeight;
+
+        // Process each layer in the sequence
+        for (let layerIdx = 0; layerIdx < seq.length; layerIdx++) {
+            const filIdx = seq[layerIdx];
+            if (filIdx > 0) {
+                // Add to corresponding filament's geometry
+                filamentFacets[filIdx - 1] += generateBox(
+                    x0, y0, z,
+                    x0 + tileSize, y0 + tileSize, z + layerHeight
+                );
+                z += layerHeight;
+            }
+        }
+    });
+
+    // Create STL file for each filament
+    colours.forEach((colour, i) => {
+        if (filamentFacets[i].length > 0) {
+            const fileName = `filament_${i}_${colour.n.replace(/[^a-zA-Z0-9]/g, '_')}.stl`;
+            stls[fileName] = wrapSTL(filamentFacets[i], `Filament_${i}`);
+        }
+    });
+
+    return stls;
+}
+
+/**
+ * Export grid configuration as JSON
+ *
+ * @param {Object} gridData - Grid data object
+ * @param {Object} config - Configuration parameters
+ * @returns {string} JSON string
+ */
+function exportGridJSON(gridData, config) {
+    const data = {
+        version: "1.0",
+        colours: gridData.colours,
+        sequences: gridData.sequences,
+        config: {
+            rows: gridData.rows,
+            cols: gridData.cols,
+            tileSize: gridData.tileSize,
+            gap: gridData.gap,
+            width: gridData.width,
+            height: gridData.height,
+            ...config
+        }
+    };
+
+    return JSON.stringify(data, null, 2);
+}
+
+/**
+ * Import grid configuration from JSON
+ *
+ * @param {string} jsonString - JSON string
+ * @returns {Object} {gridData, config}
+ */
+function importGridJSON(jsonString) {
+    const data = JSON.parse(jsonString);
+
+    const gridData = {
+        sequences: data.sequences,
+        colours: data.colours,
+        rows: data.config.rows,
+        cols: data.config.cols,
+        tileSize: data.config.tileSize,
+        gap: data.config.gap,
+        width: data.config.width,
+        height: data.config.height
+    };
+
+    // Calculate empty cells
+    const totalCells = gridData.rows * gridData.cols;
+    gridData.emptyCells = [];
+    for (let i = gridData.sequences.length; i < totalCells; i++) {
+        gridData.emptyCells.push(i);
+    }
+
+    const config = {
+        layers: data.config.layers,
+        layerHeight: data.config.layerHeight,
+        baseLayers: data.config.baseLayers
+    };
+
+    return { gridData, config };
+}
+
+/**
+ * Export reference image showing grid with sequence labels
+ *
+ * @param {HTMLCanvasElement} canvas - Canvas to draw on
+ * @param {Object} gridData - Grid data object
+ * @param {number} cellSize - Size of each cell in pixels
+ * @returns {HTMLCanvasElement} Canvas with reference image
+ */
+function exportReferenceImage(canvas, gridData, cellSize = 120) {
+    const { sequences, colours, rows, cols } = gridData;
+    const ctx = canvas.getContext('2d');
+    const padding = 5;
+    const cellTotal = cellSize + padding;
+
+    canvas.width = cols * cellTotal + padding;
+    canvas.height = rows * cellTotal + padding;
+
+    // White background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw each cell with label
+    sequences.forEach((seq, i) => {
+        if (i >= rows * cols) return;
+
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+        const x = padding + col * cellTotal;
+        const y = padding + row * cellTotal;
+
+        // Draw colored cell
+        const colour = simColour(seq, colours);
+        ctx.fillStyle = `rgb(${colour.r},${colour.g},${colour.b})`;
+        ctx.fillRect(x, y, cellSize, cellSize);
+
+        // Draw border
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, cellSize, cellSize);
+
+        // Draw sequence label
+        const brightness = colour.r + colour.g + colour.b;
+        ctx.fillStyle = brightness > 384 ? '#000000' : '#ffffff';
+        ctx.font = 'bold 14px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`[${seq.join(',')}]`, x + cellSize / 2, y + cellSize / 2);
+
+        // Draw index
+        ctx.font = '10px monospace';
+        ctx.fillText(`#${i}`, x + cellSize / 2, y + cellSize / 2 + 20);
+    });
+
+    return canvas;
+}
+/**
+ * Scan Module
+ * Handles scan analysis and color extraction from scanned calibration grids
+ */
+
+
+/**
+ * Extract colors from scanned grid using alignment
+ * Samples from the center of each grid tile
+ *
+ * @param {HTMLCanvasElement} canvas - Canvas with scan image
+ * @param {Object} gridData - Grid data for sampling positions
+ * @param {Object} alignment - Alignment parameters {offsetX, offsetY, scaleX, scaleY}
+ * @returns {Object} {palette, colorMap}
+ */
+function extractColors(canvas, gridData, alignment) {
+    const ctx = canvas.getContext('2d');
+    const { sequences, rows, cols, tileSize, gap } = gridData;
+    const { offsetX, offsetY, scaleX, scaleY } = alignment;
+
+    const colorMap = new Map();
+    const sampleRadius = 5; // Sample 5x5 pixel area
+
+    sequences.forEach((seq, i) => {
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+
+        // Calculate grid position in mm
+        const gridX = col * (tileSize + gap) + tileSize / 2;
+        const gridY = row * (tileSize + gap) + tileSize / 2;
+
+        // Transform to scan coordinates
+        const scanX = Math.round(gridX * scaleX + offsetX);
+        const scanY = Math.round(gridY * scaleY + offsetY);
+
+        // Sample area around this point
+        const sampleData = ctx.getImageData(
+            scanX - sampleRadius,
+            scanY - sampleRadius,
+            sampleRadius * 2,
+            sampleRadius * 2
+        );
+
+        const avgColor = avgColour(sampleData);
+        const key = rgb_to_key(avgColor);
+
+        if (!colorMap.has(key)) {
+            colorMap.set(key, {
+                color: avgColor,
+                count: 1,
+                positions: [i]
+            });
+        } else {
+            const entry = colorMap.get(key);
+            entry.count++;
+            entry.positions.push(i);
+        }
+    });
+
+    // Convert to palette sorted by frequency
+    const palette = Array.from(colorMap.values())
+        .map(e => e.color)
+        .sort((a, b) => {
+            const countA = colorMap.get(rgb_to_key(a)).count;
+            const countB = colorMap.get(rgb_to_key(b)).count;
+            return countB - countA;
+        });
+
+    return { palette, colorMap };
+}
+
+/**
+ * Auto-calculate scale from A4 scan dimensions
+ *
+ * @param {number} scanWidth - Scan image width in pixels
+ * @param {number} scanHeight - Scan image height in pixels
+ * @param {number} gridWidth - Grid width in mm
+ * @param {number} gridHeight - Grid height in mm
+ * @param {number} a4Width - A4 width in mm (default 210)
+ * @param {number} a4Height - A4 height in mm (default 297)
+ * @returns {Object} {scaleX, scaleY}
+ */
+function autoCalculateScale(scanWidth, scanHeight, gridWidth, gridHeight, a4Width = 210, a4Height = 297) {
+    // Calculate pixels per mm for the scan
+    const scanPxPerMmX = scanWidth / a4Width;
+    const scanPxPerMmY = scanHeight / a4Height;
+
+    // Grid is in mm, so scale = pixels per mm
+    return {
+        scaleX: scanPxPerMmX,
+        scaleY: scanPxPerMmY
+    };
+}
+
+/**
+ * Draw grid overlay on scan canvas
+ *
+ * @param {HTMLCanvasElement} canvas - Canvas to draw on
+ * @param {Object} gridData - Grid data
+ * @param {Object} alignment - Alignment parameters
+ * @param {string} color - Overlay color (default red)
+ */
+function drawGridOverlay(canvas, gridData, alignment, color = 'rgba(255, 0, 0, 0.5)') {
+    const ctx = canvas.getContext('2d');
+    const { rows, cols, tileSize, gap, width, height } = gridData;
+    const { offsetX, offsetY, scaleX, scaleY } = alignment;
+
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.scale(scaleX, scaleY);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2 / scaleX; // Adjust line width for scale
+
+    // Draw grid outline
+    ctx.strokeRect(0, 0, width, height);
+
+    // Draw individual cells
+    for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+            const x = col * (tileSize + gap);
+            const y = row * (tileSize + gap);
+            ctx.strokeRect(x, y, tileSize, tileSize);
+        }
+    }
+
+    ctx.restore();
+}
+/**
+ * Quantize Module
+ * Handles image quantization with dithering and min-detail filtering
+ */
+
+
+/**
+ * Quantize image data to a palette
+ *
+ * @param {ImageData} imageData - Image data to quantize (will be modified in place)
+ * @param {Array} palette - Array of RGB colors to quantize to
+ * @param {Object} options - Quantization options
+ * @param {boolean} options.dither - Apply Floyd-Steinberg dithering
+ * @param {Uint8Array|null} options.mask - Optional mask (1=keep, 0=filter)
+ * @returns {ImageData} Quantized image data (same as input, modified)
+ */
+function quantizeImage(imageData, palette, options = {}) {
+    const { dither = true, mask = null } = options;
+    const data = imageData.data;
+    const w = imageData.width;
+    const h = imageData.height;
+
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const i = (y * w + x) * 4;
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            const closest = findClosest({r, g, b}, palette);
+
+            // Apply quantized color
+            data[i] = closest.r;
+            data[i + 1] = closest.g;
+            data[i + 2] = closest.b;
+
+            // Set alpha based on mask
+            if (mask && mask[y * w + x] === 0) {
+                data[i + 3] = 128; // Filtered pixel - semi-transparent
+            } else {
+                data[i + 3] = 255; // Kept pixel - full opacity
+            }
+
+            // Apply dithering if enabled
+            if (dither && (!mask || mask[y * w + x] === 1)) {
+                const er = r - closest.r;
+                const eg = g - closest.g;
+                const eb = b - closest.b;
+                distributeError(data, w, h, x, y, er, eg, eb);
+            }
+        }
+    }
+
+    return imageData;
+}
+
+/**
+ * Apply min-detail filter to remove small isolated regions
+ *
+ * @param {ImageData} imageData - Image data to analyze
+ * @param {Array} palette - Palette for color matching
+ * @param {number} minDetailMM - Minimum detail size in mm
+ * @param {number} printWidth - Print width in mm
+ * @returns {Uint8Array} Mask array (1=keep, 0=filter)
+ */
+function applyMinDetailFilter(imageData, palette, minDetailMM, printWidth) {
+    const w = imageData.width;
+    const h = imageData.height;
+    const mask = new Uint8Array(w * h).fill(1);
+
+    // Calculate min detail in pixels
+    const pixelsPerMM = w / printWidth;
+    const minDetailPx = Math.round(minDetailMM * pixelsPerMM);
+
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const i = (y * w + x) * 4;
+            const centerColor = {
+                r: imageData.data[i],
+                g: imageData.data[i + 1],
+                b: imageData.data[i + 2]
+            };
+            const centerClosest = findClosest(centerColor, palette);
+
+            // Count similar neighbors in radius
+            let sameCount = 0;
+            let totalCount = 0;
+
+            for (let dy = -minDetailPx; dy <= minDetailPx; dy++) {
+                for (let dx = -minDetailPx; dx <= minDetailPx; dx++) {
+                    const nx = x + dx;
+                    const ny = y + dy;
+
+                    if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+                        const ni = (ny * w + nx) * 4;
+                        const neighborColor = {
+                            r: imageData.data[ni],
+                            g: imageData.data[ni + 1],
+                            b: imageData.data[ni + 2]
+                        };
+                        const neighborClosest = findClosest(neighborColor, palette);
+
+                        if (centerClosest.r === neighborClosest.r &&
+                            centerClosest.g === neighborClosest.g &&
+                            centerClosest.b === neighborClosest.b) {
+                            sameCount++;
+                        }
+                        totalCount++;
+                    }
+                }
+            }
+
+            // Filter if less than 50% of neighbors are the same color
+            if (sameCount < totalCount * 0.5) {
+                mask[y * w + x] = 0;
+            }
+        }
+    }
+
+    return mask;
+}
+
+/**
+ * Expand quantized image into layer maps using sequence map
+ *
+ * @param {ImageData} imageData - Quantized image data
+ * @param {Map} sequenceMap - Map from RGB key to sequence data
+ * @param {number} filamentCount - Number of filaments
+ * @returns {Array} Array of layer maps [layer][filament] = Set of "x,y" coords
+ */
+function expandToLayers(imageData, sequenceMap, filamentCount) {
+    const w = imageData.width;
+    const h = imageData.height;
+    const data = imageData.data;
+
+    // Find max layers needed
+    let maxLayers = 0;
+    for (let seqData of sequenceMap.values()) {
+        const layerCount = seqData.sequence.filter(v => v > 0).length;
+        maxLayers = Math.max(maxLayers, layerCount);
+    }
+
+    // Initialize layer maps
+    const layerMaps = [];
+    for (let li = 0; li < maxLayers; li++) {
+        layerMaps[li] = Array(filamentCount).fill(null).map(() => new Set());
+    }
+
+    // Populate layer maps
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const i = (y * w + x) * 4;
+            const pixelRGB = {
+                r: data[i],
+                g: data[i + 1],
+                b: data[i + 2]
+            };
+
+            const key = rgb_to_key(pixelRGB);
+            const seqData = sequenceMap.get(key);
+
+            if (!seqData) continue;
+
+            // Expand sequence into layers
+            let layerIdx = 0;
+            for (let seqValue of seqData.sequence) {
+                if (seqValue > 0) {
+                    const filIdx = seqValue - 1;
+                    layerMaps[layerIdx][filIdx].add(`${x},${y}`);
+                    layerIdx++;
+                }
+            }
+        }
+    }
+
+    return layerMaps;
+}
+
+// Re-export palette functions from utils
+export { parseGPL, generateGPL };
+/**
+ * STL Export Module
+ * Handles vectorization and STL generation for artwork
+ */
+
+/**
+ * Vectorize pixel set into rectangles using greedy merging
+ *
+ * @param {Set} pixelSet - Set of "x,y" pixel coordinates
+ * @param {number} width - Image width in pixels
+ * @param {number} height - Image height in pixels
+ * @returns {Array} Array of {x, y, w, h} rectangles
+ */
+function vectorizePixels(pixelSet, width, height) {
+    const rectangles = [];
+    const processed = new Set();
+
+    // Convert set to 2D grid for easier access
+    const grid = Array(height).fill(null).map(() => Array(width).fill(false));
+    for (let coord of pixelSet) {
+        const [x, y] = coord.split(',').map(Number);
+        if (y >= 0 && y < height && x >= 0 && x < width) {
+            grid[y][x] = true;
+        }
+    }
+
+    // Greedy rectangle extraction
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const coord = `${x},${y}`;
+            if (!grid[y][x] || processed.has(coord)) continue;
+
+            // Start new rectangle
+            let w = 1, h = 1;
+
+            // Expand horizontally
+            while (x + w < width && grid[y][x + w] && !processed.has(`${x + w},${y}`)) {
+                w++;
+            }
+
+            // Try to expand vertically (check if all rows match)
+            let canExpand = true;
+            while (canExpand && y + h < height) {
+                for (let dx = 0; dx < w; dx++) {
+                    if (!grid[y + h][x + dx] || processed.has(`${x + dx},${y + h}`)) {
+                        canExpand = false;
+                        break;
+                    }
+                }
+                if (canExpand) h++;
+            }
+
+            // Mark all pixels in this rectangle as processed
+            for (let dy = 0; dy < h; dy++) {
+                for (let dx = 0; dx < w; dx++) {
+                    processed.add(`${x + dx},${y + dy}`);
+                }
+            }
+
+            rectangles.push({x, y, w, h});
+        }
+    }
+
+    return rectangles;
+}
+
+/**
+ * Generate STL box geometry (12 triangular facets)
+ *
+ * @param {number} x0 - Min X
+ * @param {number} y0 - Min Y
+ * @param {number} z0 - Min Z
+ * @param {number} x1 - Max X
+ * @param {number} y1 - Max Y
+ * @param {number} z1 - Max Z
+ * @returns {string} STL facets (ASCII format)
+ */
+function generateBox(x0, y0, z0, x1, y1, z1) {
+    return `facet normal 0 0 -1
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x1} ${y0} ${z0}
+    vertex ${x1} ${y1} ${z0}
+  endloop
+endfacet
+facet normal 0 0 -1
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x1} ${y1} ${z0}
+    vertex ${x0} ${y1} ${z0}
+  endloop
+endfacet
+facet normal 0 0 1
+  outer loop
+    vertex ${x0} ${y0} ${z1}
+    vertex ${x1} ${y1} ${z1}
+    vertex ${x1} ${y0} ${z1}
+  endloop
+endfacet
+facet normal 0 0 1
+  outer loop
+    vertex ${x0} ${y0} ${z1}
+    vertex ${x0} ${y1} ${z1}
+    vertex ${x1} ${y1} ${z1}
+  endloop
+endfacet
+facet normal 0 -1 0
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x1} ${y0} ${z0}
+    vertex ${x1} ${y0} ${z1}
+  endloop
+endfacet
+facet normal 0 -1 0
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x1} ${y0} ${z1}
+    vertex ${x0} ${y0} ${z1}
+  endloop
+endfacet
+facet normal 0 1 0
+  outer loop
+    vertex ${x0} ${y1} ${z0}
+    vertex ${x1} ${y1} ${z1}
+    vertex ${x1} ${y1} ${z0}
+  endloop
+endfacet
+facet normal 0 1 0
+  outer loop
+    vertex ${x0} ${y1} ${z0}
+    vertex ${x0} ${y1} ${z1}
+    vertex ${x1} ${y1} ${z1}
+  endloop
+endfacet
+facet normal -1 0 0
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x0} ${y1} ${z1}
+    vertex ${x0} ${y1} ${z0}
+  endloop
+endfacet
+facet normal -1 0 0
+  outer loop
+    vertex ${x0} ${y0} ${z0}
+    vertex ${x0} ${y0} ${z1}
+    vertex ${x0} ${y1} ${z1}
+  endloop
+endfacet
+facet normal 1 0 0
+  outer loop
+    vertex ${x1} ${y0} ${z0}
+    vertex ${x1} ${y1} ${z0}
+    vertex ${x1} ${y1} ${z1}
+  endloop
+endfacet
+facet normal 1 0 0
+  outer loop
+    vertex ${x1} ${y0} ${z0}
+    vertex ${x1} ${y1} ${z1}
+    vertex ${x1} ${y0} ${z1}
+  endloop
+endfacet
+`;
+}
+
+/**
+ * Wrap STL facets with header/footer
+ *
+ * @param {string} facets - STL facet data
+ * @param {string} name - Object name
+ * @returns {string} Complete STL file content
+ */
+function wrapSTL(facets, name) {
+    return `solid ${name}\n${facets}endsolid ${name}\n`;
+}
+
+/**
+ * Export artwork as STL files
+ *
+ * @param {Array} layerMaps - Layer maps from expandToLayers()
+ * @param {Array} filamentNames - Names for each filament
+ * @param {Object} config - Export configuration
+ * @param {number} config.imageWidth - Image width in pixels
+ * @param {number} config.imageHeight - Image height in pixels
+ * @param {number} config.printWidth - Print width in mm
+ * @param {number} config.layerHeight - Layer height in mm
+ * @returns {Object} Map of filename -> STL content
+ */
+function exportArtworkSTLs(layerMaps, filamentNames, config) {
+    const { imageWidth, imageHeight, printWidth, layerHeight } = config;
+    const printHeight = printWidth * (imageHeight / imageWidth);
+    const pixelSize = printWidth / imageWidth;
+
+    const stls = {};
+    const filamentCount = layerMaps[0].length;
+
+    // Generate one STL per filament (all layers combined)
+    for (let fi = 0; fi < filamentCount; fi++) {
+        let filamentFacets = '';
+        let totalRects = 0;
+
+        // Combine all layers for this filament
+        for (let li = 0; li < layerMaps.length; li++) {
+            const pixels = layerMaps[li][fi];
+            if (pixels.size === 0) continue;
+
+            // Vectorize pixels to rectangles
+            const rectangles = vectorizePixels(pixels, imageWidth, imageHeight);
+            totalRects += rectangles.length;
+
+            // Generate geometry for this layer
+            const z0 = li * layerHeight;
+            const z1 = z0 + layerHeight;
+
+            for (let rect of rectangles) {
+                const x0 = rect.x * pixelSize;
+                const y0 = rect.y * pixelSize;
+                const x1 = (rect.x + rect.w) * pixelSize;
+                const y1 = (rect.y + rect.h) * pixelSize;
+
+                filamentFacets += generateBox(x0, y0, z0, x1, y1, z1);
+            }
+        }
+
+        // Only create STL if this filament has geometry
+        if (filamentFacets.length > 0) {
+            const fileName = `artwork_${filamentNames[fi].replace(/[^a-zA-Z0-9]/g, '_')}.stl`;
+            stls[fileName] = wrapSTL(filamentFacets, `Artwork_${filamentNames[fi]}`);
+        }
+    }
+
+    return stls;
+}
+
+        // ===== ALPINE.JS APPLICATION =====
+        function app() {
+            return {
+                tabs: [{id:'grid', label:'Grid'}, {id:'scan', label:'Scan'}, {id:'process', label:'Process'}, {id:'model', label:'Model'}, {id:'export', label:'Export'}],
+                activeTab: 'grid', search: '',
+
+                selectedFilaments: [],
+                config: { bedW: 256, bedH: 256, scanW: 210, scanH: 297, layerH: 0.08, baseLayers: 3, layers: 4, tileSize: 10, gap: 1 },
+                gridData: null, gridStatus: {error:false, msg:''}, sequenceMap: null,
+
+                scans: [], activeScanIdx: 0, extractedPalette: [],
+                procFile: null, procImg: null, procMode: 'raster', procView: 'res',
+                raster: { maxColors: 4, dither: 'floyd', noise: 0, pal: [] },
+                vector: { simplify: 1.0, colors: 4 },
+                processedData: null, layerMaps: null,
+
+                model: { source: 'raster', minH: 0.2, maxH: 2.0, smoothing: false },
+                meshReady: false,
+                exportOpts: { palette: true },
+
+                view: { x:0, y:0, scale:1, dragging:false, lx:0, ly:0 },
+                three: { scene:null, cam:null, ren:null, mesh:null },
+                debounceTimer: null,
+
+                get filteredFilaments() { return !this.search ? COLOURS : COLOURS.filter(f => f.n.toLowerCase().includes(this.search.toLowerCase())); },
+                get totalHeight() { return (this.config.baseLayers * this.config.layerH) + (this.config.layers * this.config.layerH); },
+
+                init() {
+                    this.initThree();
+                    this.toggleFilament(COLOURS[COLOURS.length-2]);
+                    this.toggleFilament(COLOURS[COLOURS.length-1]);
+                    this.generateGrid();
+                },
+
+                // GRID
+                switchTab(id) { this.activeTab = id; setTimeout(()=>this.resetView(), 10); },
+                isSelected(f) { return this.selectedFilaments.includes(f); },
+                toggleFilament(f) {
+                    if(this.isSelected(f)) this.selectedFilaments = this.selectedFilaments.filter(x=>x!==f);
+                    else if(this.selectedFilaments.length < 10) this.selectedFilaments.push(f);
+                    this.debounceGenerate();
+                },
+                debounceGenerate() { clearTimeout(this.debounceTimer); this.debounceTimer = setTimeout(()=>this.generateGrid(), 500); },
+
+                generateGrid() {
+                    if(this.selectedFilaments.length < 2) return;
+
+                    // Use CORRECT library functions
+                    const sequences = generateSequences(this.selectedFilaments.length, this.config.layers);
+                    const constraints = calculateConstraints({
+                        bedW: this.config.bedW, bedH: this.config.bedH,
+                        scanW: this.config.scanW, scanH: this.config.scanH
+                    });
+                    const layout = calculateGridLayout({
+                        sequenceCount: sequences.length,
+                        tileSize: this.config.tileSize,
+                        gap: this.config.gap,
+                        maxWidth: constraints.maxWidth,
+                        maxHeight: constraints.maxHeight
+                    });
+
+                    this.gridStatus = {error:false, msg:''};
+                    if(!layout.fits) {
+                        this.gridStatus = {error:true, msg:layout.error};
+                        return;
+                    }
+
+                    this.gridData = {
+                        sequences,
+                        colours: this.selectedFilaments,
+                        rows: layout.rows,
+                        cols: layout.cols,
+                        tileSize: this.config.tileSize,
+                        gap: this.config.gap,
+                        width: layout.width,
+                        height: layout.height,
+                        emptyCells: layout.emptyCells
+                    };
+
+                    // Build sequence map (CRITICAL!)
+                    this.sequenceMap = buildSequenceMap(sequences, this.selectedFilaments, layout.cols);
+
+                    this.drawGridCanvas();
+                },
+
+                drawGridCanvas() {
+                    const cvs = this.$refs.gridCanvas;
+                    drawGrid(cvs, this.gridData, { scale: 5 });
+                    this.resetView();
+                },
+
+                exportGridJSON() {
+                    const json = exportGridJSON(this.gridData, {
+                        layers: this.config.layers,
+                        layerHeight: this.config.layerH,
+                        baseLayers: this.config.baseLayers
+                    });
+                    saveAs(new Blob([json],{type:'application/json'}), 'grid.json');
+                },
+
+                exportGridImage() { this.$refs.gridCanvas.toBlob(b=>saveAs(b, 'grid.png')); },
+
+                exportGridSTLs() {
+                    const stls = exportGridSTLs(this.gridData, {
+                        layerHeight: this.config.layerH,
+                        baseLayers: this.config.baseLayers,
+                        baseColorIndex: -1
+                    });
+                    Object.entries(stls).forEach(([filename, content]) => {
+                        saveAs(new Blob([content], {type: 'text/plain'}), filename);
+                    });
+                },
+
+                // SCAN
+                addScan(e) {
+                    const f=e.target.files[0]; if(!f) return;
+                    const i=new Image();
+                    i.onload=()=>{
+                        this.scans.push({name:f.name, img:i, url:i.src, offX:0, offY:0, scaleX:1, scaleY:1});
+                        this.activeScanIdx=this.scans.length-1;
+                        this.drawScan();
+                    };
+                    i.src=URL.createObjectURL(f);
+                },
+
+                drawScan() {
+                    if(!this.scans.length) return;
+                    const s=this.scans[this.activeScanIdx];
+                    const cvs=this.$refs.scanCanvas;
+                    const ctx=cvs.getContext('2d');
+                    cvs.width=s.img.width; cvs.height=s.img.height;
+                    ctx.drawImage(s.img,0,0);
+
+                    if(this.gridData) {
+                        ctx.save();
+                        ctx.translate(s.offX, s.offY);
+                        ctx.scale(s.scaleX, s.scaleY);
+                        ctx.strokeStyle='rgba(255,0,0,0.5)';
+                        ctx.lineWidth=5;
+                        const rW = this.gridData.width * (s.img.width / this.config.scanW);
+                        const rH = this.gridData.height * (s.img.height / this.config.scanH);
+                        ctx.strokeRect(0,0,rW,rH);
+                        ctx.restore();
+                    }
+                    this.resetView();
+                },
+
+                autoAlign() {
+                    const s=this.scans[this.activeScanIdx];
+                    if(s){
+                        const alignment = autoCalculateScale(
+                            s.img.width, s.img.height,
+                            this.gridData.width, this.gridData.height
+                        );
+                        s.offX = alignment.offsetX || 100;
+                        s.offY = alignment.offsetY || 100;
+                        s.scaleX = alignment.scaleX;
+                        s.scaleY = alignment.scaleY;
+                        this.drawScan();
+                    }
+                },
+
+                analyzeScan() {
+                    const s = this.scans[this.activeScanIdx];
+                    if(!s || !this.gridData) return;
+
+                    const cvs = this.$refs.scanCanvas;
+                    const alignment = {
+                        offsetX: s.offX,
+                        offsetY: s.offY,
+                        scaleX: s.scaleX,
+                        scaleY: s.scaleY
+                    };
+
+                    // Use CORRECT library function
+                    const result = extractColors(cvs, this.gridData, alignment);
+                    this.extractedPalette = result.palette;
+                    this.raster.pal = this.extractedPalette;
+
+                    alert("Extracted " + this.extractedPalette.length + " colors.");
+                },
+
+                // PROCESS
+                loadProcessImage(e) {
+                    this.procFile=e.target.files[0];
+                    const i=new Image();
+                    i.onload=()=>{ this.procImg=i; this.toggleProcView('orig'); };
+                    i.src=URL.createObjectURL(this.procFile);
+                },
+
+                toggleProcView(v) {
+                    this.procView = v;
+                    const cvs = this.$refs.procCanvas;
+                    const ctx = cvs.getContext('2d');
+                    if(v === 'orig' && this.procImg) {
+                        cvs.width=this.procImg.width;
+                        cvs.height=this.procImg.height;
+                        ctx.drawImage(this.procImg,0,0);
+                    }
+                    else if(v === 'res' && this.processedData) {
+                        cvs.width=this.processedData.width;
+                        cvs.height=this.processedData.height;
+                        ctx.putImageData(this.processedData,0,0);
+                    }
+                    this.resetView();
+                },
+
+                processRaster() {
+                    const cvs=this.$refs.procCanvas;
+                    const ctx=cvs.getContext('2d');
+                    cvs.width=this.procImg.width;
+                    cvs.height=this.procImg.height;
+                    ctx.drawImage(this.procImg,0,0);
+                    const imageData=ctx.getImageData(0,0,cvs.width,cvs.height);
+                    const palette = this.raster.pal.length ? this.raster.pal : [{r:0,g:0,b:0},{r:255,g:255,b:255}];
+
+                    // Use CORRECT library functions
+                    const options = {
+                        dither: this.raster.dither === 'floyd',
+                        mask: null
+                    };
+                    quantizeImage(imageData, palette, options);
+
+                    this.processedData = imageData;
+
+                    // Expand to layers using sequence map
+                    if(this.sequenceMap) {
+                        this.layerMaps = expandToLayers(imageData, this.sequenceMap, this.selectedFilaments.length);
+                    }
+
+                    this.toggleProcView('res');
+                },
+
+                processVector() {
+                    ImageTracer.imageToSVG(this.procImg.src, (svg)=>{
+                        this.$refs.svgCont.innerHTML=svg;
+                    }, {numberofcolors:this.vector.colors, simplify:this.vector.simplify});
+                },
+
+                // MODEL
+                initThree() {
+                    this.three.scene = new THREE.Scene();
+                    this.three.cam = new THREE.PerspectiveCamera(75, 800/600, 0.1, 1000);
+                    this.three.ren = new THREE.WebGLRenderer({antialias:true});
+                    this.three.ren.setSize(800,600);
+                    this.$refs.threeCont.appendChild(this.three.ren.domElement);
+                    this.three.cam.position.set(0, -100, 100);
+                    this.three.cam.lookAt(0,0,0);
+                    this.three.scene.add(new THREE.AmbientLight(0x404040));
+                    this.three.scene.add(new THREE.DirectionalLight(0xffffff,1));
+                    const loop = () => { requestAnimationFrame(loop); this.three.ren.render(this.three.scene, this.three.cam); };
+                    loop();
+                },
+
+                generateModel() {
+                    if(!this.processedData && this.model.source==='raster') return alert("No raster data");
+                    if(this.three.mesh) this.three.scene.remove(this.three.mesh);
+
+                    const w=200, h=200;
+                    const geo = new THREE.PlaneGeometry(150, 150, w-1, h-1);
+                    const pos = geo.attributes.position;
+
+                    // Simple height map from brightness
+                    if(this.processedData) {
+                        const data = this.processedData.data;
+                        for(let i=0; i<pos.count; i++) {
+                            const px = Math.floor(i % w) * this.processedData.width / w;
+                            const py = Math.floor(i / w) * this.processedData.height / h;
+                            const idx = (py * this.processedData.width + px) * 4;
+                            const brightness = (data[idx] + data[idx+1] + data[idx+2]) / 765;
+                            pos.setZ(i, this.model.minH + brightness * (this.model.maxH - this.model.minH));
+                        }
+                    }
+
+                    geo.computeVertexNormals();
+                    this.three.mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+                        color:0xcccccc,
+                        flatShading:!this.model.smoothing
+                    }));
+                    this.three.scene.add(this.three.mesh);
+                    this.meshReady = true;
+                },
+
+                // EXPORT
+                runExport() {
+                    if(!this.layerMaps) return alert("No layer data. Process image first.");
+
+                    const filamentNames = this.selectedFilaments.map(c => c.n);
+                    const stls = exportArtworkSTLs(this.layerMaps, filamentNames, {
+                        imageWidth: this.processedData.width,
+                        imageHeight: this.processedData.height,
+                        printWidth: 170,
+                        layerHeight: this.config.layerH
+                    });
+
+                    Object.entries(stls).forEach(([filename, content]) => {
+                        saveAs(new Blob([content], {type: 'text/plain'}), filename);
+                    });
+
+                    alert('Exported ' + Object.keys(stls).length + ' STL files!');
+                },
+
+                // VIEW CONTROLS
+                zoom(d) { this.view.scale=Math.max(0.1, this.view.scale+d); },
+                doZoom(e) { this.zoom(e.deltaY>0?-0.1:0.1); },
+                resetView() { this.view.scale=0.8; this.view.x=0; this.view.y=0; },
+                startDrag(e) { this.view.dragging=true; this.view.lx=e.clientX; this.view.ly=e.clientY; },
+                doDrag(e) { if(this.view.dragging){this.view.x+=e.clientX-this.view.lx; this.view.y+=e.clientY-this.view.ly; this.view.lx=e.clientX; this.view.ly=e.clientY;} },
+                endDrag() { this.view.dragging=false; }
+            }
+        }
+    </script>
+</body>
+</html>

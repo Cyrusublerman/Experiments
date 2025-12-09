@@ -1,4 +1,4 @@
-# 📖 HueForge-Lite API Reference
+# 📖 Multifilament Image Print API Reference
 
 Complete API documentation for the modular library.
 
