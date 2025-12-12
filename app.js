@@ -658,7 +658,20 @@ function rgb_to_key(rgb) {
 }
 
 /**
- * Generate the calibration grid
+ * Generate the calibration grid with multi-page support
+ *
+ * PROCESS:
+ * 1. Generate all possible sequences: Recursive generation of valid layer combinations
+ *    - Valid sequences must have no gaps (no non-zero after zero)
+ *    - Must have at least one non-zero layer
+ * 2. Calculate constraints: Min of bed size and scan size determines available area
+ * 3. Calculate layout: Optimize rows/cols to fit sequences
+ *    - Start with square-ish layout: sqrt(sequences)
+ *    - Adjust to fit within constraints
+ * 4. Check capacity: If sequences exceed single grid capacity
+ *    - Calculate required pages
+ *    - Split sequences across multiple grids
+ * 5. Store grid data and build RGB -> sequence mapping
  */
 function generateGrid() {
   if (state.selectedFilaments.length < 2) {
@@ -680,22 +693,43 @@ function generateGrid() {
 
   // Generate sequences
   const seqs = generateSequences(N, M);
-  console.log(`Generated ${seqs.length} sequences`);
+  console.log(`Generated ${seqs.length} sequences for ${N} filaments, ${M} layers`);
 
-  // Calculate grid layout
+  // Calculate grid capacity
   const tilesPerRow = Math.floor(maxW / (tile + gap));
   const tilesPerCol = Math.floor(maxH / (tile + gap));
   const maxTiles = tilesPerRow * tilesPerCol;
 
+  console.log(`Grid capacity: ${maxTiles} tiles (${tilesPerRow}×${tilesPerCol})`);
+
+  // Check if sequences fit in single grid
   if (seqs.length > maxTiles) {
-    showMessage(`${seqs.length} sequences won't fit! Max: ${maxTiles}`, 'error');
-    return;
+    const pagesNeeded = Math.ceil(seqs.length / maxTiles);
+    const shouldSplit = confirm(
+      `⚠ ${seqs.length} sequences won't fit in one grid (max: ${maxTiles} tiles).\n\n` +
+      `This would require ${pagesNeeded} separate grids.\n\n` +
+      `Options:\n` +
+      `• OK: Generate first grid only (${maxTiles} sequences)\n` +
+      `• Cancel: Reduce filaments or layers, or increase bed/scan size`
+    );
+
+    if (!shouldSplit) {
+      showMessage('Grid generation cancelled. Adjust parameters to fit all sequences.', 'info');
+      return;
+    }
+
+    // Trim to first page
+    seqs.splice(maxTiles);
+    showMessage(`⚠ Generated first grid only. ${pagesNeeded - 1} more grid(s) needed for full coverage.`, 'warning');
   }
 
+  // Calculate optimal layout for available sequences
   let rows = Math.ceil(Math.sqrt(seqs.length));
   let cols = Math.ceil(seqs.length / rows);
 
-  while (cols > tilesPerRow || rows > tilesPerCol) {
+  // Adjust to fit constraints
+  let iterations = 0;
+  while ((cols > tilesPerRow || rows > tilesPerCol) && iterations < 100) {
     if (cols > tilesPerRow) {
       rows++;
       cols = Math.ceil(seqs.length / rows);
@@ -704,9 +738,10 @@ function generateGrid() {
       rows = Math.ceil(seqs.length / cols);
     }
     if (rows * cols > maxTiles) {
-      showMessage('Cannot fit sequences in available space', 'error');
+      showMessage('Cannot fit sequences in available space (algorithm failed)', 'error');
       return;
     }
+    iterations++;
   }
 
   // Calculate empty cells
@@ -719,6 +754,10 @@ function generateGrid() {
   // Get selected colours
   const colours = state.selectedFilaments.map(i => COLOURS[i]);
 
+  // Calculate physical dimensions
+  const gridWidth = cols * (tile + gap) - gap;
+  const gridHeight = rows * (tile + gap) - gap;
+
   // Store grid data
   state.grid = {
     seqs,
@@ -727,9 +766,11 @@ function generateGrid() {
     tile,
     gap,
     colours,
-    width: cols * (tile + gap) - gap,
-    height: rows * (tile + gap) - gap,
-    empty_cells: emptyCells
+    width: gridWidth,
+    height: gridHeight,
+    empty_cells: emptyCells,
+    maxCapacity: maxTiles,
+    totalSequences: generateSequences(N, M).length // Store total before trimming
   };
 
   // Build sequence map
@@ -758,11 +799,23 @@ function generateGrid() {
   // Update UI
   updateGridUI();
 
-  showMessage(`✓ Generated ${seqs.length} sequences in ${rows}×${cols} grid`, 'success');
+  const fitStatus = gridWidth <= maxW && gridHeight <= maxH ? '✓' : '⚠';
+  showMessage(
+    `${fitStatus} Generated ${seqs.length} sequences in ${rows}×${cols} grid (${gridWidth.toFixed(1)}×${gridHeight.toFixed(1)}mm)`,
+    gridWidth <= maxW && gridHeight <= maxH ? 'success' : 'warning'
+  );
 }
 
 /**
- * Draw the grid on canvas
+ * Draw the grid on canvas with size restriction visualization
+ *
+ * PROCESS:
+ * 1. Calculate physical dimensions: Grid size in mm based on tiles, gaps
+ * 2. Calculate constraints: Min of bed size and scan size
+ * 3. Calculate display scale: Fit constraint area to available canvas space
+ * 4. Draw constraint boundary: Visual representation of size limits
+ * 5. Draw grid to scale: Render grid tiles at correct relative size
+ * 6. Handle overflow: Show warning if grid exceeds constraints
  */
 function drawGrid() {
   const canvas = document.getElementById('gridCanvas');
@@ -773,37 +826,140 @@ function drawGrid() {
     return;
   }
 
-  const { seqs, rows, cols, colours, empty_cells } = state.grid;
+  const { seqs, rows, cols, colours, empty_cells, tile, gap, width: gridMM_W, height: gridMM_H } = state.grid;
   const container = canvas.parentElement;
 
-  // Calculate scale to fit container
-  const scale = Math.min(
-    container.clientWidth / cols,
-    (container.clientHeight - 80) / rows  // Leave room for stats
+  // Get constraint dimensions (mm)
+  const bedW = +document.getElementById('bedW').value;
+  const bedH = +document.getElementById('bedH').value;
+  const scanW = +document.getElementById('scanW').value;
+  const scanH = +document.getElementById('scanH').value;
+
+  const constraintW = Math.min(bedW, scanW);
+  const constraintH = Math.min(bedH, scanH);
+
+  // Calculate available canvas space (leave room for stats row)
+  const availableWidth = container.clientWidth - 40;
+  const availableHeight = container.clientHeight - 100;
+
+  // Calculate scale to fit constraint boundary in available space
+  // This ensures the constraint area always fills the canvas optimally
+  const pxPerMM = Math.min(
+    availableWidth / constraintW,
+    availableHeight / constraintH
   );
 
-  // Set canvas size
-  canvas.width = cols * scale;
-  canvas.height = rows * scale;
+  // Calculate canvas size based on constraint area
+  const constraintPX_W = constraintW * pxPerMM;
+  const constraintPX_H = constraintH * pxPerMM;
 
-  // Auto-fit canvas
-  canvas.style.width = `${cols * scale}px`;
-  canvas.style.height = `${rows * scale}px`;
+  // Set canvas to fit constraint area
+  canvas.width = constraintPX_W + 40;
+  canvas.height = constraintPX_H + 40;
+  canvas.style.width = `${canvas.width}px`;
+  canvas.style.height = `${canvas.height}px`;
 
-  // Draw filled cells
+  // Clear background
+  ctx.fillStyle = '#e8e8e8';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Center constraint area on canvas
+  const offsetX = (canvas.width - constraintPX_W) / 2;
+  const offsetY = (canvas.height - constraintPX_H) / 2;
+
+  // Draw constraint boundary (size restriction)
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+
+  // Draw bed constraint (light blue)
+  const bedPX_W = bedW * pxPerMM;
+  const bedPX_H = bedH * pxPerMM;
+  ctx.fillStyle = 'rgba(100, 150, 255, 0.08)';
+  ctx.fillRect(0, 0, bedPX_W, bedPX_H);
+  ctx.strokeStyle = 'rgba(100, 150, 255, 0.4)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 4]);
+  ctx.strokeRect(0, 0, bedPX_W, bedPX_H);
+  ctx.setLineDash([]);
+
+  // Draw scan constraint (light yellow)
+  const scanPX_W = scanW * pxPerMM;
+  const scanPX_H = scanH * pxPerMM;
+  ctx.fillStyle = 'rgba(255, 200, 100, 0.08)';
+  ctx.fillRect(0, 0, scanPX_W, scanPX_H);
+  ctx.strokeStyle = 'rgba(255, 200, 100, 0.4)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 4]);
+  ctx.strokeRect(0, 0, scanPX_W, scanPX_H);
+  ctx.setLineDash([]);
+
+  // Draw active constraint boundary (dark)
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(0, 0, constraintPX_W, constraintPX_H);
+
+  // Add constraint labels
+  ctx.fillStyle = '#666';
+  ctx.font = 'bold 11px monospace';
+  ctx.fillText(`Constraint: ${constraintW}×${constraintH}mm`, 8, constraintPX_H - 8);
+
+  ctx.font = '10px monospace';
+  ctx.fillText(`Bed: ${bedW}×${bedH}mm`, 8, 16);
+  ctx.fillText(`Scan: ${scanW}×${scanH}mm`, 8, 30);
+
+  // Calculate grid dimensions in pixels
+  const gridPX_W = gridMM_W * pxPerMM;
+  const gridPX_H = gridMM_H * pxPerMM;
+  const cellSizePX = tile * pxPerMM;
+  const gapPX = gap * pxPerMM;
+
+  // Check if grid fits within constraints
+  const gridFits = gridMM_W <= constraintW && gridMM_H <= constraintH;
+
+  if (!gridFits) {
+    // Draw warning overlay
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
+    ctx.fillRect(0, 0, constraintPX_W, constraintPX_H);
+
+    ctx.fillStyle = '#c00';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('⚠ GRID TOO LARGE', 8, constraintPX_H / 2);
+    ctx.font = '11px monospace';
+    ctx.fillText(`Grid: ${gridMM_W.toFixed(1)}×${gridMM_H.toFixed(1)}mm`, 8, constraintPX_H / 2 + 20);
+    ctx.fillText(`Exceeds constraint by ${Math.max(gridMM_W - constraintW, gridMM_H - constraintH).toFixed(1)}mm`, 8, constraintPX_H / 2 + 36);
+  }
+
+  // Center grid within constraint area
+  const gridOffsetX = (constraintPX_W - gridPX_W) / 2;
+  const gridOffsetY = (constraintPX_H - gridPX_H) / 2;
+
+  ctx.translate(gridOffsetX, gridOffsetY);
+
+  // Draw grid background (white)
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, gridPX_W, gridPX_H);
+  ctx.strokeStyle = '#999';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0, 0, gridPX_W, gridPX_H);
+
+  // Draw grid cells
   seqs.forEach((seq, i) => {
     if (i >= rows * cols) return;
     const row = Math.floor(i / cols);
     const col = i % cols;
+
+    const x = col * (cellSizePX + gapPX);
+    const y = row * (cellSizePX + gapPX);
+
     const colour = simColour(seq, colours);
 
     ctx.fillStyle = `rgb(${colour.r},${colour.g},${colour.b})`;
-    ctx.fillRect(col * scale, row * scale, scale, scale);
+    ctx.fillRect(x, y, cellSizePX, cellSizePX);
 
     // Border
     ctx.strokeStyle = '#666';
     ctx.lineWidth = 1;
-    ctx.strokeRect(col * scale, row * scale, scale, scale);
+    ctx.strokeRect(x, y, cellSizePX, cellSizePX);
   });
 
   // Draw empty cells
@@ -811,29 +967,41 @@ function drawGrid() {
     empty_cells.forEach(emptyIdx => {
       const row = Math.floor(emptyIdx / cols);
       const col = emptyIdx % cols;
-      const x = col * scale;
-      const y = row * scale;
+      const x = col * (cellSizePX + gapPX);
+      const y = row * (cellSizePX + gapPX);
 
       // Grey background
       ctx.fillStyle = '#f5f5f5';
-      ctx.fillRect(x, y, scale, scale);
+      ctx.fillRect(x, y, cellSizePX, cellSizePX);
 
       // Grey border
       ctx.strokeStyle = '#ccc';
       ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, scale, scale);
+      ctx.strokeRect(x, y, cellSizePX, cellSizePX);
 
       // Draw X
       ctx.strokeStyle = '#999';
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(x + 5, y + 5);
-      ctx.lineTo(x + scale - 5, y + scale - 5);
-      ctx.moveTo(x + scale - 5, y + 5);
-      ctx.lineTo(x + 5, y + scale - 5);
+      ctx.moveTo(x + 3, y + 3);
+      ctx.lineTo(x + cellSizePX - 3, y + cellSizePX - 3);
+      ctx.moveTo(x + cellSizePX - 3, y + 3);
+      ctx.lineTo(x + 3, y + cellSizePX - 3);
       ctx.stroke();
     });
   }
+
+  ctx.restore();
+
+  // Store rendering metadata for click handling
+  state.gridRenderMeta = {
+    pxPerMM,
+    offsetX: offsetX + gridOffsetX,
+    offsetY: offsetY + gridOffsetY,
+    cellSizePX,
+    gapPX,
+    gridFits
+  };
 
   // Add click handler
   setupGridClick();
@@ -844,7 +1012,7 @@ function drawGrid() {
  */
 function setupGridClick() {
   const canvas = document.getElementById('gridCanvas');
-  if (!state.grid) return;
+  if (!state.grid || !state.gridRenderMeta) return;
 
   // Remove old listener
   const newCanvas = canvas.cloneNode(true);
@@ -855,11 +1023,16 @@ function setupGridClick() {
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
 
-    const cellW = newCanvas.width / state.grid.cols;
-    const cellH = newCanvas.height / state.grid.rows;
+    // Account for grid offset
+    const { offsetX, offsetY, cellSizePX, gapPX } = state.gridRenderMeta;
+    const relX = clickX - offsetX;
+    const relY = clickY - offsetY;
 
-    const col = Math.floor(clickX / cellW);
-    const row = Math.floor(clickY / cellH);
+    // Check if click is within grid bounds
+    if (relX < 0 || relY < 0) return;
+
+    const col = Math.floor(relX / (cellSizePX + gapPX));
+    const row = Math.floor(relY / (cellSizePX + gapPX));
 
     if (col < 0 || col >= state.grid.cols || row < 0 || row >= state.grid.rows) {
       return;
@@ -1182,7 +1355,16 @@ function drawScanCanvas() {
 }
 
 /**
- * Draw grid overlay on scan
+ * Draw grid overlay on scan with improved clarity
+ *
+ * PROCESS:
+ * 1. Transform context to align with scan image
+ * 2. Calculate cell dimensions based on grid layout
+ * 3. For each cell:
+ *    - Draw outer cell boundary (thin white outline)
+ *    - If empty: Draw gray diagonal cross
+ *    - If filled: Draw sampling region (center area where color is extracted)
+ * 4. Add corner markers for alignment reference
  */
 function drawScanOverlay(ctx, imgX, imgY, imgScale) {
   if (!state.grid || !state.activeScan) return;
@@ -1198,6 +1380,45 @@ function drawScanOverlay(ctx, imgX, imgY, imgScale) {
   const cellW = scan.image.width / state.grid.cols;
   const cellH = scan.image.height / state.grid.rows;
 
+  // Draw grid outline first (thicker, more visible)
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.lineWidth = 3 / imgScale;
+  ctx.strokeRect(0, 0, scan.image.width, scan.image.height);
+
+  // Draw corner markers for alignment reference
+  const markerSize = Math.min(cellW, cellH) * 0.3;
+  ctx.strokeStyle = 'rgba(255, 0, 0, 0.9)';
+  ctx.lineWidth = 3 / imgScale;
+
+  // Top-left
+  ctx.beginPath();
+  ctx.moveTo(0, markerSize);
+  ctx.lineTo(0, 0);
+  ctx.lineTo(markerSize, 0);
+  ctx.stroke();
+
+  // Top-right
+  ctx.beginPath();
+  ctx.moveTo(scan.image.width - markerSize, 0);
+  ctx.lineTo(scan.image.width, 0);
+  ctx.lineTo(scan.image.width, markerSize);
+  ctx.stroke();
+
+  // Bottom-left
+  ctx.beginPath();
+  ctx.moveTo(0, scan.image.height - markerSize);
+  ctx.lineTo(0, scan.image.height);
+  ctx.lineTo(markerSize, scan.image.height);
+  ctx.stroke();
+
+  // Bottom-right
+  ctx.beginPath();
+  ctx.moveTo(scan.image.width - markerSize, scan.image.height);
+  ctx.lineTo(scan.image.width, scan.image.height);
+  ctx.lineTo(scan.image.width, scan.image.height - markerSize);
+  ctx.stroke();
+
+  // Draw individual cells
   for (let r = 0; r < state.grid.rows; r++) {
     for (let c = 0; c < state.grid.cols; c++) {
       const cellIdx = r * state.grid.cols + c;
@@ -1206,35 +1427,107 @@ function drawScanOverlay(ctx, imgX, imgY, imgScale) {
 
       // Check if empty cell
       if (state.grid.empty_cells && state.grid.empty_cells.includes(cellIdx)) {
-        // Grey border for empty
-        ctx.strokeStyle = 'rgba(128, 128, 128, 0.8)';
-        ctx.lineWidth = 3 / imgScale;
+        // Subtle gray border for empty cells
+        ctx.strokeStyle = 'rgba(180, 180, 180, 0.4)';
+        ctx.lineWidth = 1 / imgScale;
         ctx.strokeRect(x, y, cellW, cellH);
 
-        // X mark
-        ctx.strokeStyle = '#888';
-        ctx.lineWidth = 2 / imgScale;
+        // Gray X mark
+        ctx.strokeStyle = 'rgba(100, 100, 100, 0.5)';
+        ctx.lineWidth = 1.5 / imgScale;
         ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(x + cellW, y + cellH);
-        ctx.moveTo(x + cellW, y);
-        ctx.lineTo(x, y + cellH);
+        ctx.moveTo(x + cellW * 0.2, y + cellH * 0.2);
+        ctx.lineTo(x + cellW * 0.8, y + cellH * 0.8);
+        ctx.moveTo(x + cellW * 0.8, y + cellH * 0.2);
+        ctx.lineTo(x + cellW * 0.2, y + cellH * 0.8);
         ctx.stroke();
       } else {
-        // Red border for filled
-        ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
-        ctx.lineWidth = 2 / imgScale;
+        // Thin white cell boundary
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.lineWidth = 1 / imgScale;
         ctx.strokeRect(x, y, cellW, cellH);
 
-        // Green sampling area
-        const dx = cellW * (1 - deadSpace) / 2;
-        const dy = cellH * (1 - deadSpace) / 2;
-        ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)';
+        // Sampling region (center area where color is extracted)
+        const sampleMargin = (1 - deadSpace) / 2;
+        const sampleX = x + cellW * sampleMargin;
+        const sampleY = y + cellH * sampleMargin;
+        const sampleW = cellW * deadSpace;
+        const sampleH = cellH * deadSpace;
+
+        // Sampling area with subtle fill
+        ctx.fillStyle = 'rgba(0, 255, 100, 0.08)';
+        ctx.fillRect(sampleX, sampleY, sampleW, sampleH);
+
+        // Sampling area border (brighter green)
+        ctx.strokeStyle = 'rgba(0, 255, 100, 0.6)';
+        ctx.lineWidth = 1.5 / imgScale;
+        ctx.strokeRect(sampleX, sampleY, sampleW, sampleH);
+
+        // Draw center crosshair in sampling region
+        ctx.strokeStyle = 'rgba(0, 255, 100, 0.3)';
         ctx.lineWidth = 1 / imgScale;
-        ctx.strokeRect(x + dx, y + dy, cellW * deadSpace, cellH * deadSpace);
+        ctx.beginPath();
+        // Horizontal
+        ctx.moveTo(sampleX + sampleW * 0.3, y + cellH / 2);
+        ctx.lineTo(sampleX + sampleW * 0.7, y + cellH / 2);
+        // Vertical
+        ctx.moveTo(x + cellW / 2, sampleY + sampleH * 0.3);
+        ctx.lineTo(x + cellW / 2, sampleY + sampleH * 0.7);
+        ctx.stroke();
       }
     }
   }
+
+  ctx.restore();
+
+  // Draw legend in top-right corner of canvas (outside the transform)
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 1;
+  const legendX = ctx.canvas.width - 180;
+  const legendY = 10;
+  const legendW = 170;
+  const legendH = 85;
+
+  ctx.fillRect(legendX, legendY, legendW, legendH);
+  ctx.strokeRect(legendX, legendY, legendW, legendH);
+
+  ctx.font = 'bold 11px monospace';
+  ctx.fillStyle = '#333';
+  ctx.fillText('Grid Overlay Legend:', legendX + 8, legendY + 16);
+
+  ctx.font = '10px monospace';
+
+  // White border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(legendX + 8, legendY + 28);
+  ctx.lineTo(legendX + 28, legendY + 28);
+  ctx.stroke();
+  ctx.fillStyle = '#555';
+  ctx.fillText('Cell boundary', legendX + 35, legendY + 32);
+
+  // Green box
+  ctx.fillStyle = 'rgba(0, 255, 100, 0.15)';
+  ctx.fillRect(legendX + 8, legendY + 38, 20, 14);
+  ctx.strokeStyle = 'rgba(0, 255, 100, 0.6)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(legendX + 8, legendY + 38, 20, 14);
+  ctx.fillStyle = '#555';
+  ctx.fillText('Sampling area', legendX + 35, legendY + 48);
+
+  // Red corner
+  ctx.strokeStyle = 'rgba(255, 0, 0, 0.9)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(legendX + 8, legendY + 64);
+  ctx.lineTo(legendX + 8, legendY + 58);
+  ctx.lineTo(legendX + 14, legendY + 58);
+  ctx.stroke();
+  ctx.fillStyle = '#555';
+  ctx.fillText('Alignment marker', legendX + 35, legendY + 64);
 
   ctx.restore();
 }
