@@ -1,4 +1,4 @@
-# 🎨 HueForge-Lite
+# 🎨 Multifilament Image Print
 
 **Multi-Color FDM Printing Workflow** - Generate calibration grids, analyze scans, and convert artwork to multi-color 3D prints.
 
@@ -31,9 +31,9 @@ open http://localhost:8000/app-modular.html
 
 ---
 
-## 📋 What is HueForge-Lite?
+## 📋 What is Multifilament Image Print?
 
-HueForge-Lite is a complete workflow for creating multi-color FDM (Fused Deposition Modeling) 3D prints using **filament swapping** and **color mixing** through layering.
+Multifilament Image Print is a complete workflow for creating multi-color FDM (Fused Deposition Modeling) 3D prints using **filament swapping** and **color mixing** through layering.
 
 ### The Process:
 

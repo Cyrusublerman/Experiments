@@ -1,4 +1,4 @@
-# HueForge-Lite Modular Library - Complete Implementation
+# Multifilament Image Print Modular Library - Complete Implementation
 
 ## 🎉 What We Built
 
@@ -327,9 +327,9 @@ import * as HFL from './lib/index.js';
 </script>
 
 <!-- Option 2: CDN (after bundling) -->
-<script src="https://cdn.example.com/hueforge-lite.min.js"></script>
+<script src="https://cdn.example.com/multifilament-image-print.min.js"></script>
 <script>
-const { generateSequences, exportGridSTLs } = HueForgeLite;
+const { generateSequences, exportGridSTLs } = MultifilamentImagePrint;
 </script>
 ```
 
