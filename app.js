@@ -422,14 +422,6 @@ function initUploadZones() {
   });
 }
 
-function handleScanUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  console.log('📷 Scan uploaded:', file.name);
-  // TODO: Process scan file
-}
-
 function handleImageUpload(e) {
   const file = e.target.files[0];
   if (!file) return;
