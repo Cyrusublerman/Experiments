@@ -448,34 +448,355 @@
 <div class="tab-view" id="tab-docs">
   <div class="right-pane" style="grid-column: 1 / -1;">
     <div class="docs-content" id="docsContent">
-      <h1>4-Colour FDM Workflow Documentation</h1>
+      <h1>Multifilament Image Print - Technical Documentation</h1>
 
       <h2 id="overview">Overview</h2>
-      <p>This application helps you create multi-colour FDM prints using a calibration-based workflow.</p>
+      <p>This application implements a complete workflow for creating multi-colour FDM (Fused Deposition Modeling) prints through a calibration-based approach. The system generates a physical colour palette by printing all possible filament layer combinations, scanning them, and using those scanned colours to accurately reproduce artwork.</p>
 
-      <h2 id="workflow">Workflow</h2>
+      <h2 id="workflow">Core Workflow</h2>
       <ol>
-        <li><strong>Grid:</strong> Generate a calibration grid with all colour combinations</li>
-        <li><strong>Scan:</strong> Print and scan the grid to extract actual colours</li>
-        <li><strong>Image Process:</strong> Quantize your artwork to the scanned palette</li>
-        <li><strong>Model Builder:</strong> Convert to 3D models with height mapping</li>
-        <li><strong>Export:</strong> Export STL files ready for printing</li>
+        <li><strong>Grid Generation:</strong> Algorithmic generation of all possible colour combinations</li>
+        <li><strong>Physical Calibration:</strong> Print and scan the grid to capture actual colour mixing results</li>
+        <li><strong>Image Quantization:</strong> Map artwork colours to calibrated palette</li>
+        <li><strong>3D Model Generation:</strong> Convert colour data to layered 3D geometry</li>
+        <li><strong>Export:</strong> Generate STL files with proper per-filament separation</li>
       </ol>
 
-      <h2 id="grid-tab">Grid Tab</h2>
-      <p>The Grid tab generates all possible colour combinations for your selected filaments...</p>
+      <h2 id="sequence-generation">Sequence Generation Algorithm</h2>
 
-      <h2 id="scan-tab">Scan Tab</h2>
-      <p>After printing the calibration grid, scan it and upload here...</p>
+      <h3>Mathematical Foundation</h3>
+      <p>For <code>N</code> filament colours and <code>M</code> layers per tile, the system generates all valid sequences where:</p>
+      <ul>
+        <li>Each layer can be: empty (0) or filled with filament i (1 to N)</li>
+        <li>Sequences must have no gaps: no non-zero layer can appear after a zero layer</li>
+        <li>At least one layer must be non-zero (reject all-empty sequences)</li>
+      </ul>
 
-      <h2 id="image-process-tab">Image Process Tab</h2>
-      <p>Upload raster or vector artwork to process...</p>
+      <h3>Generation Process</h3>
+      <pre><code>function generateSequences(N, M):
+  sequences = []
 
-      <h2 id="model-builder-tab">Model Builder Tab</h2>
-      <p>Generate 3D models from processed images...</p>
+  function isValid(sequence):
+    // Reject all-empty
+    if all elements = 0: return false
 
-      <h2 id="export-tab">Export Tab</h2>
-      <p>Export your final STL files and project data...</p>
+    // Reject sequences with gaps
+    foundZero = false
+    for each value in sequence:
+      if value = 0:
+        foundZero = true
+      else if foundZero:
+        return false  // Non-zero after zero
+    return true
+
+  function generate(current, depth):
+    if depth = M:
+      if isValid(current):
+        sequences.append(copy(current))
+      return
+
+    // If last layer was zero, only add zeros
+    if current.last() = 0:
+      generate(current + [0], depth + 1)
+    else:
+      // Try all filaments (0 to N)
+      for i in 0..N:
+        generate(current + [i], depth + 1)
+
+  generate([], 0)
+  return sequences</code></pre>
+
+      <h3>Sequence Count</h3>
+      <p>The number of valid sequences grows according to:</p>
+      <p><code>S(N, M) ≈ (N+1)^M / 2</code> (approximate, actual count excludes invalid patterns)</p>
+      <p>Examples:</p>
+      <ul>
+        <li>2 filaments, 4 layers: ~30 sequences</li>
+        <li>4 filaments, 4 layers: ~340 sequences</li>
+        <li>4 filaments, 5 layers: ~1700 sequences (requires multiple grids)</li>
+      </ul>
+
+      <h2 id="grid-layout">Grid Layout Calculation</h2>
+
+      <h3>Constraint Calculation</h3>
+      <pre><code>constraintWidth = min(bedWidth, scanWidth)
+constraintHeight = min(bedHeight, scanHeight)</code></pre>
+      <p>The effective constraint is the smaller of the printer bed size and scanner bed size, ensuring printed grids can be scanned.</p>
+
+      <h3>Capacity Calculation</h3>
+      <pre><code>tileStep = tileSize + gapSize
+tilesPerRow = floor(constraintWidth / tileStep)
+tilesPerCol = floor(constraintHeight / tileStep)
+maxCapacity = tilesPerRow × tilesPerCol</code></pre>
+
+      <h3>Layout Optimization</h3>
+      <p>The algorithm seeks a square-ish layout that minimizes wasted space:</p>
+      <pre><code>// Start with square layout
+cols = ceil(sqrt(sequenceCount))
+rows = ceil(sequenceCount / cols)
+
+// Adjust to fit constraints
+while cols > tilesPerRow OR rows > tilesPerCol:
+  if cols > tilesPerRow:
+    rows = rows + 1
+    cols = ceil(sequenceCount / rows)
+  else:
+    cols = cols + 1
+    rows = ceil(sequenceCount / cols)
+
+  if rows × cols > maxCapacity:
+    error: cannot fit</code></pre>
+
+      <h3>Physical Dimensions</h3>
+      <pre><code>gridWidth = cols × (tileSize + gapSize) - gapSize
+gridHeight = rows × (tileSize + gapSize) - gapSize</code></pre>
+      <p>Note: The final gap is subtracted since there's no gap after the last tile.</p>
+
+      <h2 id="colour-simulation">Colour Simulation</h2>
+
+      <h3>Layer Averaging Method</h3>
+      <p>Predicted colour is calculated by averaging all non-empty layers:</p>
+      <pre><code>function simulateColour(sequence, colours):
+  r_sum = 0, g_sum = 0, b_sum = 0
+  count = 0
+
+  for each layer in sequence:
+    if layer > 0:  // Non-empty
+      filament = colours[layer - 1]
+      (r, g, b) = hexToRGB(filament.hex)
+      r_sum += r
+      g_sum += g
+      b_sum += b
+      count += 1
+
+  if count = 0:
+    return (255, 255, 255)  // White default
+
+  return (
+    round(r_sum / count),
+    round(g_sum / count),
+    round(b_sum / count)
+  )</code></pre>
+
+      <h3>Limitations</h3>
+      <p>This simple averaging model does not account for:</p>
+      <ul>
+        <li>Light transmission and absorption through layers</li>
+        <li>Filament translucency vs opacity</li>
+        <li>Layer order effects (bottom vs top layer dominance)</li>
+        <li>Print temperature and material flow characteristics</li>
+      </ul>
+      <p><strong>This is why physical calibration (scanning) is essential for accurate colour reproduction.</strong></p>
+
+      <h2 id="scan-alignment">Scan Alignment</h2>
+
+      <h3>Coordinate Transform</h3>
+      <p>The scan overlay applies a 2D transformation to align the grid with the scanned image:</p>
+      <pre><code>transform = translate(offsetX, offsetY) × scale(scaleX, scaleY)</code></pre>
+
+      <h3>Auto-Alignment Calculation</h3>
+      <pre><code>// Calculate pixels per millimeter
+pxPerMM_X = scanImageWidth / scanPhysicalWidth
+pxPerMM_Y = scanImageHeight / scanPhysicalHeight
+
+// Calculate grid size in pixels
+gridPX_W = gridMM_W × pxPerMM_X
+gridPX_H = gridMM_H × pxPerMM_Y
+
+// Calculate scale factors
+scaleX = gridPX_W / scanImageWidth
+scaleY = gridPX_H / scanImageHeight
+
+// Center alignment
+offsetX = (scanImageWidth - gridPX_W / scaleX) / 2
+offsetY = (scanImageHeight - gridPX_H / scaleY) / 2</code></pre>
+
+      <h3>Cell Coordinate Mapping</h3>
+      <pre><code>cellWidth = scanImageWidth / gridCols
+cellHeight = scanImageHeight / gridRows
+
+for row in 0..gridRows:
+  for col in 0..gridCols:
+    cellX = offsetX + col × cellWidth × scaleX
+    cellY = offsetY + row × cellHeight × scaleY</code></pre>
+
+      <h2 id="colour-extraction">Colour Extraction</h2>
+
+      <h3>Sampling Region</h3>
+      <p>Each cell is sampled from its center region to avoid edge artifacts:</p>
+      <pre><code>deadSpace = 0.60  // Default: sample center 60%
+
+sampleX = cellX + cellWidth × (1 - deadSpace) / 2
+sampleY = cellY + cellHeight × (1 - deadSpace) / 2
+sampleW = cellWidth × deadSpace
+sampleH = cellHeight × deadSpace</code></pre>
+
+      <h3>Colour Averaging</h3>
+      <pre><code>imageData = getImageData(sampleX, sampleY, sampleW, sampleH)
+r_sum = 0, g_sum = 0, b_sum = 0
+pixelCount = 0
+
+for each pixel in imageData:
+  r_sum += pixel.r
+  g_sum += pixel.g
+  b_sum += pixel.b
+  pixelCount += 1
+
+avgColour = (
+  round(r_sum / pixelCount),
+  round(g_sum / pixelCount),
+  round(b_sum / pixelCount)
+)</code></pre>
+
+      <h2 id="visualization-scaling">Grid Visualization Scaling</h2>
+
+      <h3>Display Scale Calculation</h3>
+      <p>The grid preview always fits the available canvas space while maintaining aspect ratio:</p>
+      <pre><code>// Available space (minus margins)
+availableW = containerWidth - 40
+availableH = containerHeight - 100
+
+// Calculate pixels per millimeter to fit constraint
+pxPerMM = min(
+  availableW / constraintWidth,
+  availableH / constraintHeight
+)
+
+// Convert physical dimensions to display pixels
+constraintPX_W = constraintWidth × pxPerMM
+constraintPX_H = constraintHeight × pxPerMM
+gridPX_W = gridMM_W × pxPerMM
+gridPX_H = gridMM_H × pxPerMM
+cellSizePX = tileMM × pxPerMM</code></pre>
+
+      <h3>Centering</h3>
+      <pre><code>// Center constraint boundary on canvas
+offsetX = (canvasWidth - constraintPX_W) / 2
+offsetY = (canvasHeight - constraintPX_H) / 2
+
+// Center grid within constraint boundary
+gridOffsetX = (constraintPX_W - gridPX_W) / 2
+gridOffsetY = (constraintPX_H - gridPX_H) / 2</code></pre>
+
+      <h2 id="multi-grid">Multi-Grid Handling</h2>
+
+      <h3>Capacity Check</h3>
+      <pre><code>if sequenceCount > maxCapacity:
+  pagesNeeded = ceil(sequenceCount / maxCapacity)
+
+  // Option 1: Generate first page only
+  sequences = sequences[0..maxCapacity]
+
+  // Option 2: Generate all pages (future enhancement)
+  for page in 0..pagesNeeded:
+    start = page × maxCapacity
+    end = min((page + 1) × maxCapacity, sequenceCount)
+    pageSequences = sequences[start..end]
+    generateGridPage(page, pageSequences)</code></pre>
+
+      <h2 id="stl-generation">STL Generation</h2>
+
+      <h3>Per-Filament Separation</h3>
+      <p>For each filament colour, the system generates a separate STL containing all layers of that colour:</p>
+      <pre><code>for each filament in colours:
+  geometry = []
+
+  for each sequence in grid:
+    for layerIndex in 0..M:
+      if sequence[layerIndex] = filament:
+        // Generate quad for this tile at this layer height
+        z = baseLayerHeight + layerIndex × layerHeight
+        addTileGeometry(geometry, tileX, tileY, z, tileSize)
+
+  exportSTL(filament.name + ".stl", geometry)</code></pre>
+
+      <h3>Z-Height Calculation</h3>
+      <pre><code>baseHeight = baseLayerCount × layerHeight
+
+for layerIndex in 0..layersPerTile:
+  layerZ = baseHeight + layerIndex × layerHeight</code></pre>
+
+      <h2 id="data-structures">Key Data Structures</h2>
+
+      <h3>Sequence</h3>
+      <pre><code>Sequence = [layer0, layer1, ..., layerM]
+where layer_i ∈ {0, 1, 2, ..., N}
+  0 = empty
+  1..N = filament index</code></pre>
+
+      <h3>Grid Data</h3>
+      <pre><code>{
+  sequences: Array&lt;Sequence&gt;,
+  rows: number,
+  cols: number,
+  tile: number (mm),
+  gap: number (mm),
+  colours: Array&lt;Colour&gt;,
+  width: number (mm),
+  height: number (mm),
+  emptyCells: Array&lt;number&gt;
+}</code></pre>
+
+      <h3>Sequence Map</h3>
+      <pre><code>Map&lt;RGBKey, SequenceData&gt;
+where:
+  RGBKey = "r,g,b" (string)
+  SequenceData = {
+    sequence: Sequence,
+    colours: Array&lt;Colour&gt;,
+    gridPosition: {row, col, index}
+  }</code></pre>
+
+      <h2 id="performance">Performance Considerations</h2>
+
+      <h3>Sequence Generation</h3>
+      <p>Complexity: O((N+1)^M) - Exponential in layers</p>
+      <p>For large N or M, generation can take seconds. Results are cached in application state.</p>
+
+      <h3>Canvas Rendering</h3>
+      <p>Complexity: O(rows × cols) - Linear in grid size</p>
+      <p>Each cell requires multiple draw operations. For grids >1000 cells, consider render optimizations.</p>
+
+      <h3>Colour Extraction</h3>
+      <p>Complexity: O(rows × cols × samplingArea)</p>
+      <p>Each cell samples hundreds to thousands of pixels. Use deadSpace parameter to reduce sampling area if performance issues occur.</p>
+
+      <h2 id="troubleshooting">Common Issues</h2>
+
+      <h3>Grid Too Large</h3>
+      <p><strong>Symptom:</strong> Red warning overlay, grid exceeds constraint boundary</p>
+      <p><strong>Solutions:</strong></p>
+      <ul>
+        <li>Reduce tile size</li>
+        <li>Increase gap size (may affect scan accuracy)</li>
+        <li>Use fewer layers per tile</li>
+        <li>Use fewer filament colours</li>
+        <li>Increase bed/scan size constraints</li>
+        <li>Accept multi-grid workflow (generate multiple grids)</li>
+      </ul>
+
+      <h3>Misaligned Scan</h3>
+      <p><strong>Symptom:</strong> Grid overlay doesn't match printed tiles</p>
+      <p><strong>Solutions:</strong></p>
+      <ul>
+        <li>Use "Auto-Align" button (calculates from physical dimensions)</li>
+        <li>Manually adjust offset X/Y (translation)</li>
+        <li>Manually adjust scale X/Y (if printer/scanner have dimensional inaccuracies)</li>
+        <li>Ensure scan resolution is high enough (minimum 150 DPI recommended)</li>
+        <li>Check that scan dimensions match physical paper size exactly</li>
+      </ul>
+
+      <h3>Inaccurate Colours</h3>
+      <p><strong>Symptom:</strong> Extracted colours don't match visual appearance</p>
+      <p><strong>Solutions:</strong></p>
+      <ul>
+        <li>Increase deadSpace % (sample more from cell center, avoid edges)</li>
+        <li>Improve lighting during scanning (even, white light)</li>
+        <li>Calibrate scanner colour profile</li>
+        <li>Allow print to cool completely before scanning (material colour can shift)</li>
+        <li>Ensure consistent print settings (temperature, speed, layer height)</li>
+      </ul>
+
     </div>
   </div>
 </div>
